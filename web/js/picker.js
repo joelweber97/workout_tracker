@@ -57,12 +57,17 @@ export function openExercisePicker(onSelect) {
     // Long lists are the norm here — cap the DOM and let search narrow it.
     const shown = matches.slice(0, 120);
     resultsEl.innerHTML = shown.map((e) => `
-      <button class="row" data-pick="${e.id}">
-        <div class="row-main">
+      <div class="row">
+        <button class="row-main" data-pick="${e.id}" style="background:none;border:0;font:inherit;color:inherit;text-align:left;padding:0">
           <div class="row-title">${esc(e.name)}</div>
-          <div class="row-sub">${groupLabel(e.muscleGroup)} · ${equipmentLabel(e.equipment)}</div>
-        </div>
-      </button>`).join('')
+          <div class="row-sub">${groupLabel(e.muscleGroup)} · ${equipmentLabel(e.equipment)}${
+            e.secondary && e.secondary.length ? ` · also ${e.secondary.map(groupLabel).join(', ').toLowerCase()}` : ''}</div>
+        </button>
+        ${e.description ? `<button class="icon-btn" data-info="${e.id}"
+          aria-label="How to do ${esc(e.name)}" aria-expanded="false"
+          style="color:var(--ink-3)">${icon('info', 19)}</button>` : ''}
+      </div>
+      <div class="exercise-cue" data-cue-for="${e.id}" hidden>${esc(e.description ?? '')}</div>`).join('')
       + (matches.length > shown.length
         ? `<div class="pad center muted">${matches.length - shown.length} more — keep typing to narrow it.</div>`
         : '');
@@ -78,6 +83,13 @@ export function openExercisePicker(onSelect) {
       el.setAttribute('aria-pressed', String(el === btn));
     });
     paint();
+  });
+
+  onClick(overlay, '[data-info]', (btn) => {
+    const cue = overlay.querySelector(`[data-cue-for="${btn.dataset.info}"]`);
+    if (!cue) return;
+    cue.hidden = !cue.hidden;
+    btn.setAttribute('aria-expanded', String(!cue.hidden));
   });
 
   onClick(overlay, '[data-pick]', async (btn) => {
@@ -123,6 +135,10 @@ function promptNewExercise(initialName) {
             </select>
           </div>
           <div class="field">
+            <label for="ex-desc">How to do it (optional)</label>
+            <textarea id="ex-desc" placeholder="Setup and the one cue worth remembering"></textarea>
+          </div>
+          <div class="field">
             <label for="ex-equip">Equipment</label>
             <select id="ex-equip">
               ${['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'band', 'other']
@@ -146,6 +162,7 @@ function promptNewExercise(initialName) {
         name,
         muscleGroup: overlay.querySelector('#ex-group').value,
         equipment: overlay.querySelector('#ex-equip').value,
+        description: overlay.querySelector('#ex-desc').value.trim(),
       });
       done(created);
     });

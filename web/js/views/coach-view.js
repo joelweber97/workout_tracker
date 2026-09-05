@@ -2,6 +2,7 @@ import * as store from '../store.js';
 import { chrome } from '../app.js';
 import { icon, onClick, navigate, toast } from '../ui.js';
 import { esc, weightValue } from '../format.js';
+import { setsPerMuscle, SET_TARGET, groupLabel, MUSCLE_GROUPS } from '../domain.js';
 import { review, suggest } from '../coach.js';
 import { buildBriefing, copyToClipboard } from '../ai.js';
 
@@ -24,6 +25,11 @@ export default function renderCoach(root) {
     || a.exercise.name.localeCompare(b.exercise.name));
 
   root.innerHTML = `
+    <div class="section-title">Weekly sets per muscle</div>
+    <div class="card">
+      ${volumeTargetsHtml()}
+    </div>
+
     <div class="section-title">What the numbers say</div>
     <div class="card">
       ${notes.map((note) => `
@@ -68,4 +74,44 @@ export default function renderCoach(root) {
     if (!briefing) { toast('Log a session first'); return; }
     toast(await copyToClipboard(briefing) ? 'Briefing copied' : 'Couldn’t access the clipboard');
   });
+}
+
+/**
+ * Hard sets per muscle per week against the 10-20 range. Averaged over four
+ * weeks rather than counting the current week, which would read as "behind"
+ * every Monday morning.
+ */
+function volumeTargetsHtml() {
+  const WEEKS = 4;
+  const since = Date.now() - WEEKS * 7 * 24 * 3600 * 1000;
+  const totals = setsPerMuscle(store.state.workouts, since, store.exercisesById());
+
+  const rows = MUSCLE_GROUPS
+    .filter((group) => !['fullBody', 'cardio'].includes(group))
+    .map((group) => ({ group, perWeek: (totals.get(group) ?? 0) / WEEKS }))
+    .filter((row) => row.perWeek > 0)
+    .sort((a, b) => b.perWeek - a.perWeek);
+
+  if (!rows.length) {
+    return '<div class="pad muted">No completed sets in the last four weeks.</div>';
+  }
+
+  // The track runs to the top of the range, with a tick at the halfway mark
+  // standing in for the minimum.
+  return rows.map(({ group, perWeek }) => {
+    const state = perWeek < SET_TARGET.min ? 'under'
+      : perWeek <= SET_TARGET.max ? 'good' : 'over';
+    const width = Math.min(100, (perWeek / SET_TARGET.max) * 100);
+    return `
+      <div class="target-row">
+        <span class="target-name">${groupLabel(group)}</span>
+        <span class="target-track"><span class="target-fill ${state}" style="width:${width.toFixed(0)}%"></span></span>
+        <span class="target-value">${perWeek.toFixed(1)}/wk</span>
+      </div>`;
+  }).join('')
+    + `<div class="pad muted" style="font-size:12px">
+        Ten to twenty hard sets per muscle per week is the range most hypertrophy
+        research settles on. Amber is under it, red is past it. Sets from an
+        exercise's secondary muscles count as a half.
+      </div>`;
 }

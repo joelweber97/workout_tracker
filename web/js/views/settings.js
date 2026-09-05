@@ -83,7 +83,7 @@ export default function renderSettings(root) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `ledger-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `overload-backup-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -137,7 +137,7 @@ async function showPersistence(root) {
   }
 
   note.innerHTML = `Storage is <strong>not</strong> marked durable, so the browser may clear it
-    if space runs low. Adding Ledger to your home screen usually fixes this.
+    if space runs low. Adding Overload to your home screen usually fixes this.
     <button class="btn btn-sm btn-quiet" data-persist style="margin-top:8px">Request durable storage</button>`;
 
   note.querySelector('[data-persist]').addEventListener('click', async () => {

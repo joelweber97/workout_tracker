@@ -2,9 +2,13 @@
 // a workout carries its entries and sets inline rather than being stitched back
 // together from separate tables, because that's exactly how the UI reads it.
 
+// The app is called Overload; this key is not. It was named first, and renaming
+// it would orphan every workout already logged on the device.
 const DB_NAME = 'ledger';
-const DB_VERSION = 1;
-const STORES = ['exercises', 'workouts', 'routines'];
+// v2 added the `metrics` store. `onupgradeneeded` only creates what's missing,
+// so an existing install keeps its workouts.
+const DB_VERSION = 2;
+const STORES = ['exercises', 'workouts', 'routines', 'metrics'];
 
 let dbPromise = null;
 
@@ -26,7 +30,7 @@ function open() {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
     // Another tab is holding an old version open.
-    request.onblocked = () => reject(new Error('Ledger is open in another tab; close it and reload.'));
+    request.onblocked = () => reject(new Error('Overload is open in another tab; close it and reload.'));
   });
 
   return dbPromise;

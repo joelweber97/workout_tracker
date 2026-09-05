@@ -10,7 +10,7 @@
  * near the network.
  */
 
-const CACHE_VERSION = 'ledger-v1';
+const CACHE_VERSION = 'overload-v2';
 
 const SHELL = [
   './',
@@ -29,6 +29,7 @@ const SHELL = [
   './js/format.js',
   './js/library.js',
   './js/picker.js',
+  './js/gym.js',
   './js/rest.js',
   './js/store.js',
   './js/ui.js',

@@ -39,8 +39,12 @@ export default function renderToday(root) {
         </a>
       </div>
     ` : `
-      <div style="margin-top:14px">
+      <div style="margin-top:14px" class="stack">
         <button class="btn btn-primary btn-block" data-start>${icon('plus')} Start empty workout</button>
+        ${finished.length ? `
+          <button class="btn btn-quiet btn-block" data-repeat="${finished[0].id}">
+            ${icon('repeat')} Repeat “${esc(finished[0].name)}”
+          </button>` : ''}
       </div>
     `}
 
@@ -96,6 +100,12 @@ export default function renderToday(root) {
     const routine = store.routineById(btn.dataset.run);
     if (!routine) return;
     const workout = await store.startFromRoutine(routine);
+    navigate(`#/workout/${workout.id}`);
+  });
+
+  onClick(root, '[data-repeat]', async (btn) => {
+    const workout = await store.repeatWorkout(btn.dataset.repeat);
+    if (!workout) { toast('Couldn’t find that session'); return; }
     navigate(`#/workout/${workout.id}`);
   });
 

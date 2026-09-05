@@ -20,6 +20,9 @@ const ICON_PATHS = {
   copy: ['M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1z', 'M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1'],
   scale: ['M12 3v18', 'M5 7h14', 'M5 7l-2 6a3 3 0 0 0 6 0z', 'M19 7l-2 6a3 3 0 0 0 6 0z'],
   timer: ['M12 22a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 8v5l3 2', 'M9 2h6'],
+  info: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M12 16v-5', 'M12 8h.01'],
+  body: ['M12 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4z', 'M9 21v-5l-1.5-3L7 9a5 5 0 0 1 10 0l-.5 4L15 16v5'],
+  repeat: ['M17 2l4 4-4 4', 'M3 11V9a4 4 0 0 1 4-4h14', 'M7 22l-4-4 4-4', 'M21 13v2a4 4 0 0 1-4 4H3'],
 };
 
 export function icon(name, size = 20) {
@@ -71,3 +74,73 @@ export const tile = ({ label, value, caption, iconName }) => `
     <div class="tile-value">${value}</div>
     ${caption ? `<div class="tile-caption">${caption}</div>` : ''}
   </div>`;
+
+/**
+ * Bottom action sheet. Resolves with the chosen key, or null if dismissed.
+ * Used wherever a row needs more than one action and a row of buttons would
+ * crowd the layout.
+ */
+export function actionSheet(title, items) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-backdrop';
+    overlay.innerHTML = `
+      <div class="sheet" role="dialog" aria-label="${title}">
+        <div class="sheet-title">${title}</div>
+        ${items.map((item) => `
+          <button class="sheet-item ${item.destructive ? 'destructive' : ''}"
+                  data-key="${item.key}" ${item.disabled ? 'disabled' : ''}>
+            ${item.label}${item.detail ? `<span class="sheet-detail">${item.detail}</span>` : ''}
+          </button>`).join('')}
+        <button class="sheet-item cancel" data-key="">Cancel</button>
+      </div>`;
+
+    const close = (key) => { overlay.remove(); resolve(key || null); };
+
+    overlay.addEventListener('click', (event) => {
+      // A tap on the backdrop itself dismisses; a tap on the sheet does not.
+      if (event.target === overlay) { close(null); return; }
+      const button = event.target.closest('[data-key]');
+      if (button) close(button.dataset.key);
+    });
+
+    document.body.appendChild(overlay);
+  });
+}
+
+/** Bottom sheet with a single numeric field. Resolves with a number or null. */
+export function promptNumber(title, { value = '', unit = '', step = 'any', placeholder = '' } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-backdrop';
+    overlay.innerHTML = `
+      <div class="sheet" role="dialog" aria-label="${title}">
+        <div class="sheet-title">${title}</div>
+        <div class="pad">
+          <input type="number" inputmode="decimal" step="${step}" value="${value}"
+                 placeholder="${placeholder}" aria-label="${title}">
+          ${unit ? `<div class="muted" style="margin-top:6px;font-size:13px">${unit}</div>` : ''}
+        </div>
+        <button class="sheet-item" data-save>Save</button>
+        <button class="sheet-item cancel" data-cancel>Cancel</button>
+      </div>`;
+
+    const input = overlay.querySelector('input');
+    const close = (result) => { overlay.remove(); resolve(result); };
+
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay || event.target.closest('[data-cancel]')) { close(null); return; }
+      if (event.target.closest('[data-save]')) {
+        const parsed = parseFloat(input.value);
+        close(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+      }
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') overlay.querySelector('[data-save]').click();
+    });
+
+    document.body.appendChild(overlay);
+    input.focus();
+    input.select();
+  });
+}

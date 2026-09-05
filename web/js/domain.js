@@ -30,25 +30,64 @@ export function region(group) {
 
 export const REGION_COLORS = { Upper: 'var(--upper)', Lower: 'var(--lower)', Other: 'var(--other)' };
 
+/** The weekly hard-set range most hypertrophy research converges on. */
+export const SET_TARGET = { min: 10, max: 20 };
+
+/**
+ * Hard sets per muscle since a given date — the number that actually drives
+ * growth, more than tonnage does. Secondary muscles count as half a set: a row
+ * trains the biceps, but not the way a curl does.
+ */
+export function setsPerMuscle(workouts, since, exercisesById) {
+  const totals = new Map();
+  const add = (muscle, amount) => {
+    if (!muscle) return;
+    totals.set(muscle, (totals.get(muscle) ?? 0) + amount);
+  };
+
+  for (const workout of workouts) {
+    if (!workout.endedAt || workout.startedAt < since) continue;
+    for (const entry of workout.entries) {
+      const exercise = exercisesById.get(entry.exerciseId);
+      if (!exercise) continue;
+      const sets = completedSets(entry).length;
+      if (!sets) continue;
+      add(exercise.muscleGroup, sets);
+      for (const muscle of exercise.secondary ?? []) add(muscle, sets * 0.5);
+    }
+  }
+  return totals;
+}
+
 export function uid() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 // --- Constructors -----------------------------------------------------------
 
-export function newExercise({ name, muscleGroup, equipment, isCustom = false, notes = '' }) {
+export function newExercise({
+  name, muscleGroup, equipment, isCustom = false, notes = '',
+  description = '', secondary = [],
+}) {
   return {
     id: uid(), name, muscleGroup, equipment, isCustom, notes,
+    description,
+    // Muscles the movement also trains. Counted at half weight in the volume
+    // balance, since a secondary muscle isn't getting the same stimulus.
+    secondary,
     archived: false, createdAt: Date.now(),
   };
 }
 
 export function newSet({ reps = 0, weightKg = 0, warmup = false } = {}) {
-  return { id: uid(), reps, weightKg, done: false, warmup, completedAt: null };
+  // `rpe` stays null unless logged — the progression engine treats absent and
+  // "felt easy" very differently.
+  return { id: uid(), reps, weightKg, done: false, warmup, rpe: null, completedAt: null };
 }
 
 export function newEntry(exerciseId, sets = [newSet()]) {
-  return { id: uid(), exerciseId, notes: '', sets };
+  // `group` is null for a normal exercise, or a shared id for supersets.
+  return { id: uid(), exerciseId, notes: '', group: null, sets };
 }
 
 export function newWorkout(name = 'Workout') {
@@ -146,6 +185,30 @@ export function oneRepMaxHistory(exerciseId, workouts) {
     })
     .filter(Boolean)
     .sort((a, b) => a.date - b.date);
+}
+
+/**
+ * Does this set beat everything logged for the exercise before it? Compares
+ * estimated 1RM, so a heavier single and a lighter set of ten are judged on the
+ * same scale. `excludeWorkoutId` keeps the session in progress out of its own
+ * comparison.
+ */
+export function beatsRecord(set, exerciseId, workouts, excludeWorkoutId) {
+  const value = estimatedOneRepMax(set);
+  if (!value) return false;
+
+  let best = 0;
+  for (const workout of workouts) {
+    if (!workout.endedAt || workout.id === excludeWorkoutId) continue;
+    for (const entry of workout.entries) {
+      if (entry.exerciseId !== exerciseId) continue;
+      for (const previous of completedSets(entry)) {
+        best = Math.max(best, estimatedOneRepMax(previous) ?? 0);
+      }
+    }
+  }
+  // A first-ever set isn't a record; there's nothing to beat.
+  return best > 0 && value > best;
 }
 
 export function personalRecord(exerciseId, workouts) {

@@ -1,4 +1,4 @@
-/* Ledger — one stylesheet, no framework.
+/* Overload — one stylesheet, no framework.
    Sized for a phone held one-handed in a gym: large tap targets, numerals that
    stay legible at arm's length, and nothing that needs a precise tap. */
 
@@ -536,3 +536,190 @@ textarea { resize: vertical; min-height: 72px; }
 .picker .topbar { position: static; }
 .picker .topbar h1 { font-size: 17px; text-align: center; }
 .picker-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+/* --- Action sheets -------------------------------------------------------- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.4);
+  animation: fade-in 0.15s ease-out;
+}
+
+.sheet {
+  width: 100%;
+  max-width: 480px;
+  margin: 8px;
+  margin-bottom: calc(8px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  animation: sheet-up 0.2s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.sheet-title {
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sheet-item:active { background: var(--surface-2); }
+.sheet-item:disabled { opacity: 0.35; cursor: default; }
+.sheet-item.destructive { color: var(--accent); }
+.sheet-item.cancel { justify-content: center; font-weight: 650; border-bottom: 0; }
+.sheet-detail { color: var(--ink-3); font-size: 13px; }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheet-up { from { transform: translateY(16px); } to { transform: translateY(0); } }
+
+/* --- Set options, RPE, plates, supersets ---------------------------------- */
+
+.set-index {
+  position: relative;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink-2);
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.set-rpe {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.set-row.pr .set-index::after {
+  content: "PR";
+  position: absolute;
+  top: -2px;
+  right: -10px;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--good);
+}
+
+.rpe-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  padding: 10px 14px 4px;
+}
+
+.rpe-grid button {
+  min-height: 38px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.rpe-grid button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.plates {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.plates strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.group-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--other) 20%, transparent);
+  color: var(--other);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+/* --- Volume targets ------------------------------------------------------- */
+
+.target-row {
+  display: grid;
+  grid-template-columns: 84px 1fr 62px;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.target-row:last-child { border-bottom: 0; }
+.target-name { font-size: 14px; font-weight: 500; }
+.target-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.target-fill { display: block; height: 100%; border-radius: 999px; }
+.target-fill.under { background: var(--warn); }
+.target-fill.good { background: var(--good); }
+.target-fill.over { background: var(--accent); }
+.target-value { font-size: 12px; color: var(--ink-2); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Marks the bottom of the recommended range on the track. */
+.target-track::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--line-strong);
+}
+
+/* --- Exercise cue --------------------------------------------------------- */
+
+.exercise-cue {
+  padding: 0 16px 12px 16px;
+  margin-top: -4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}

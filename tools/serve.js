@@ -51,5 +51,5 @@ http.createServer(function handle(req, res) {
     res.end(data);
   });
 }).listen(PORT, function ready() {
-  console.log('Ledger dev server on http://localhost:' + PORT);
+  console.log('Overload dev server on http://localhost:' + PORT);
 });

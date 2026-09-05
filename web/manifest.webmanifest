@@ -1,6 +1,6 @@
 {
-  "name": "Ledger — Workout Tracker",
-  "short_name": "Ledger",
+  "name": "Overload — Workout Tracker",
+  "short_name": "Overload",
   "description": "Log your lifts, see what's working, and get told what weight to use next.",
   "start_url": "./index.html",
   "scope": "./",

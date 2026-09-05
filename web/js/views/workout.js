@@ -2,7 +2,7 @@
 // closing the tab mid-session loses nothing.
 //
 // Two kinds of change happen here and they're handled differently: structural
-// edits (adding a set, removing an exercise) re-render the view, while typing a
+// edits (adding a set, reordering exercises) re-render the view, while typing a
 // weight and ticking a set update the DOM in place. A re-render on keystroke
 // would blur the field you're typing into.
 
@@ -10,12 +10,20 @@ import * as store from '../store.js';
 import { chrome } from '../app.js';
 import { openExercisePicker } from '../picker.js';
 import { restTimer } from '../rest.js';
-import { icon, onClick, tile, navigate, toast, haptic } from '../ui.js';
+import {
+  icon, onClick, tile, navigate, toast, haptic, actionSheet,
+} from '../ui.js';
 import { esc, volume, duration, weightValue, toKg } from '../format.js';
 import {
-  newSet, newEntry, workoutVolume, workoutSetCount, workoutDuration, lastPerformance,
+  newSet, newEntry, uid, workoutVolume, workoutSetCount, workoutDuration,
+  lastPerformance, beatsRecord,
 } from '../domain.js';
 import { suggest } from '../coach.js';
+import { platesPerSide, describePlates, warmupRamp, DEFAULT_BAR } from '../gym.js';
+
+const RPE_VALUES = [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
+
+let elapsedTicker = null;
 
 export default function renderWorkout(root, workoutId) {
   const workout = store.workoutById(workoutId);
@@ -25,8 +33,7 @@ export default function renderWorkout(root, workoutId) {
 
   chrome.setTitle(workout.name);
   chrome.setLead(`<button class="icon-btn" data-back aria-label="Back">${icon('back')}</button>`);
-  chrome.setActions(`
-    <button class="icon-btn" data-finish>Finish</button>`);
+  chrome.setActions('<button class="icon-btn" data-finish>Finish</button>');
   chrome.onLead('[data-back]', () => navigate('#/today'));
   chrome.onAction('[data-finish]', () => finish(workout));
 
@@ -40,7 +47,8 @@ export default function renderWorkout(root, workoutId) {
       </div>
     </div>
 
-    <div id="entries">${workout.entries.map((entry) => entryHtml(entry, workout, unit)).join('')}</div>
+    <div id="entries">${workout.entries.map((entry, index) =>
+      entryHtml(entry, index, workout, unit)).join('')}</div>
 
     <div style="margin-top:14px">
       <button class="btn btn-quiet btn-block" data-add-exercise>${icon('plus')} Add exercise</button>
@@ -80,11 +88,14 @@ export default function renderWorkout(root, workoutId) {
       else set.weightKg = toKg(value, unit);
     });
     refreshTotals(root, workoutId, unit);
+    refreshPlates(root, workoutId, entryId, unit);
   });
 
   onClick(root, '[data-toggle]', (btn) => {
     const { entryId, setId } = btn.dataset;
+    const entry = workout.entries.find((e) => e.id === entryId);
     let done = false;
+    let record = false;
 
     store.mutateWorkoutSilently(workoutId, (w) => {
       const set = findSet(w, entryId, setId);
@@ -92,17 +103,66 @@ export default function renderWorkout(root, workoutId) {
       set.done = !set.done;
       set.completedAt = set.done ? Date.now() : null;
       done = set.done;
+      if (done && !set.warmup && entry) {
+        record = beatsRecord(set, entry.exerciseId, store.state.workouts, workoutId);
+      }
     });
 
+    const row = btn.closest('.set-row');
     btn.classList.toggle('on', done);
     btn.innerHTML = icon(done ? 'check' : 'circle', 25);
-    btn.closest('.set-row')?.classList.toggle('done', done);
+    row?.classList.toggle('done', done);
+    row?.classList.toggle('pr', done && record);
     refreshTotals(root, workoutId, unit);
 
     if (done) {
       haptic(store.state.settings.haptics);
+      if (record) {
+        const name = store.exerciseById(entry.exerciseId)?.name ?? 'that lift';
+        toast(`Personal record — ${name}`);
+        haptic(store.state.settings.haptics, [40, 60, 40, 60, 90]);
+      }
       startRest(root);
     }
+  });
+
+  // --- Set options ----------------------------------------------------------
+
+  onClick(root, '[data-set-options]', (btn) => {
+    const { entryId, setId } = btn.dataset;
+    const panel = root.querySelector(`[data-options-for="${setId}"]`);
+    if (!panel) return;
+
+    // Only one panel open at a time — two sets of RPE buttons on screen is
+    // ambiguous about which set you're rating.
+    root.querySelectorAll('[data-options-for]').forEach((el) => {
+      if (el !== panel) el.hidden = true;
+    });
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) panel.innerHTML = setOptionsHtml(workoutId, entryId, setId);
+  });
+
+  onClick(root, '[data-rpe]', (btn) => {
+    const { entryId, setId, rpe } = btn.dataset;
+    const value = rpe === '' ? null : Number(rpe);
+
+    store.mutateWorkoutSilently(workoutId, (w) => {
+      const set = findSet(w, entryId, setId);
+      if (set) set.rpe = value;
+    });
+
+    btn.parentElement.querySelectorAll('[data-rpe]').forEach((el) => {
+      el.setAttribute('aria-pressed', String(el === btn && value !== null));
+    });
+    const label = root.querySelector(`[data-set-options][data-set-id="${setId}"] .set-rpe`);
+    if (label) label.textContent = value === null ? '' : `@${value}`;
+  });
+
+  onClick(root, '[data-warmup-toggle]', (btn) => {
+    store.mutateWorkout(workoutId, (w) => {
+      const set = findSet(w, btn.dataset.entryId, btn.dataset.setId);
+      if (set) set.warmup = !set.warmup;
+    });
   });
 
   // --- Structural edits (re-render) -----------------------------------------
@@ -111,16 +171,9 @@ export default function renderWorkout(root, workoutId) {
     store.mutateWorkout(workoutId, (w) => {
       const entry = w.entries.find((e) => e.id === btn.dataset.addSet);
       if (!entry) return;
-      // Carry the previous set's numbers forward — usually the right starting point.
+      // Carry the previous set's numbers forward — usually the right start.
       const template = [...entry.sets].reverse().find((s) => !s.warmup) ?? entry.sets.at(-1);
       entry.sets.push(newSet({ reps: template?.reps ?? 0, weightKg: template?.weightKg ?? 0 }));
-    });
-  });
-
-  onClick(root, '[data-add-warmup]', (btn) => {
-    store.mutateWorkout(workoutId, (w) => {
-      const entry = w.entries.find((e) => e.id === btn.dataset.addWarmup);
-      entry?.sets.push(newSet({ warmup: true }));
     });
   });
 
@@ -129,12 +182,6 @@ export default function renderWorkout(root, workoutId) {
     store.mutateWorkout(workoutId, (w) => {
       const entry = w.entries.find((e) => e.id === entryId);
       if (entry) entry.sets = entry.sets.filter((s) => s.id !== setId);
-    });
-  });
-
-  onClick(root, '[data-drop-entry]', (btn) => {
-    store.mutateWorkout(workoutId, (w) => {
-      w.entries = w.entries.filter((e) => e.id !== btn.dataset.dropEntry);
     });
   });
 
@@ -153,6 +200,10 @@ export default function renderWorkout(root, workoutId) {
     toast('Applied to remaining sets');
   });
 
+  onClick(root, '[data-entry-menu]', (btn) => {
+    openEntryMenu(workoutId, btn.dataset.entryMenu, unit);
+  });
+
   onClick(root, '[data-add-exercise]', () => {
     openExercisePicker(async (exercise) => {
       await store.mutateWorkout(workoutId, (w) => {
@@ -166,8 +217,8 @@ export default function renderWorkout(root, workoutId) {
 
   mountRestBar(root);
 
-  // The elapsed tile has to advance on its own. Replacing only the totals row
-  // leaves the weight and rep inputs — and their focus — untouched.
+  // The elapsed tile advances on its own. Replacing only the totals row leaves
+  // the weight and rep inputs — and their focus — untouched.
   clearInterval(elapsedTicker);
   elapsedTicker = setInterval(() => {
     if (!root.isConnected) { clearInterval(elapsedTicker); return; }
@@ -175,7 +226,78 @@ export default function renderWorkout(root, workoutId) {
   }, 1000);
 }
 
-let elapsedTicker = null;
+// --- Entry menu --------------------------------------------------------------
+
+async function openEntryMenu(workoutId, entryId, unit) {
+  const workout = store.workoutById(workoutId);
+  const index = workout.entries.findIndex((e) => e.id === entryId);
+  const entry = workout.entries[index];
+  if (!entry) return;
+
+  const name = store.exerciseById(entry.exerciseId)?.name ?? 'Exercise';
+  const next = workout.entries[index + 1];
+  const grouped = Boolean(entry.group);
+
+  const choice = await actionSheet(name, [
+    { key: 'warmup', label: 'Add warm-up ramp', detail: '40 / 60 / 80%' },
+    { key: 'up', label: 'Move up', disabled: index === 0 },
+    { key: 'down', label: 'Move down', disabled: index === workout.entries.length - 1 },
+    grouped
+      ? { key: 'ungroup', label: 'Remove from superset' }
+      : { key: 'group', label: 'Superset with next', disabled: !next },
+    { key: 'info', label: 'How to do it' },
+    { key: 'remove', label: 'Remove exercise', destructive: true },
+  ]);
+
+  if (!choice) return;
+
+  if (choice === 'info') { navigate(`#/exercise/${entry.exerciseId}`); return; }
+
+  store.mutateWorkout(workoutId, (w) => {
+    const target = w.entries.find((e) => e.id === entryId);
+    const at = w.entries.findIndex((e) => e.id === entryId);
+    if (!target) return;
+
+    switch (choice) {
+      case 'warmup': {
+        // Ramp from the heaviest working set that has a weight on it.
+        const working = target.sets.filter((s) => !s.warmup && s.weightKg > 0);
+        const top = working.reduce((best, s) => (s.weightKg > (best?.weightKg ?? 0) ? s : best), null);
+        if (!top) { toast('Enter a working weight first'); return; }
+        const ramp = warmupRamp(top.weightKg, unit);
+        if (!ramp.length) { toast('That weight is light enough to skip warm-ups'); return; }
+        target.sets = [
+          ...ramp.map((step) => newSet({ ...step, warmup: true })),
+          ...target.sets,
+        ];
+        break;
+      }
+      case 'up':
+        if (at > 0) [w.entries[at - 1], w.entries[at]] = [w.entries[at], w.entries[at - 1]];
+        break;
+      case 'down':
+        if (at < w.entries.length - 1) [w.entries[at + 1], w.entries[at]] = [w.entries[at], w.entries[at + 1]];
+        break;
+      case 'group': {
+        const partner = w.entries[at + 1];
+        if (!partner) break;
+        // Join the pair, reusing whichever group id already exists.
+        const group = target.group ?? partner.group ?? uid();
+        target.group = group;
+        partner.group = group;
+        break;
+      }
+      case 'ungroup':
+        target.group = null;
+        break;
+      case 'remove':
+        w.entries = w.entries.filter((e) => e.id !== entryId);
+        break;
+      default:
+        break;
+    }
+  });
+}
 
 // --- Rendering ---------------------------------------------------------------
 
@@ -187,20 +309,34 @@ function totalsHtml(workout, unit) {
   ].join('');
 }
 
-function entryHtml(entry, workout, unit) {
+/** Superset labels are per-workout letters: A, B, C… in the order they appear. */
+function groupLabels(workout) {
+  const labels = new Map();
+  let next = 0;
+  for (const entry of workout.entries) {
+    if (entry.group && !labels.has(entry.group)) {
+      labels.set(entry.group, String.fromCharCode(65 + next));
+      next += 1;
+    }
+  }
+  return labels;
+}
+
+function entryHtml(entry, index, workout, unit) {
   const exercise = store.exerciseById(entry.exerciseId);
   const name = exercise?.name ?? 'Deleted exercise';
   const previous = exercise ? lastPerformance(exercise.id, store.state.workouts, workout.id) : null;
   const previousLabel = previous ? `${weightValue(previous.weightKg, unit)}×${previous.reps}` : '—';
   const tip = exercise ? suggest(exercise, store.state.workouts, unit, { excludeWorkoutId: workout.id }) : null;
+  const label = groupLabels(workout).get(entry.group);
 
   return `
     <div class="card" style="margin-top:14px">
       <div class="entry-head">
+        ${label ? `<span class="group-tag">SS ${label}</span>` : ''}
         <h3>${esc(name)}</h3>
-        <button class="btn btn-sm btn-quiet" data-add-warmup="${entry.id}">Warm-up</button>
-        <button class="icon-btn" data-drop-entry="${entry.id}" aria-label="Remove ${esc(name)}"
-                style="color:var(--ink-3)">${icon('trash', 18)}</button>
+        <button class="icon-btn" data-entry-menu="${entry.id}"
+                aria-label="Options for ${esc(name)}" style="color:var(--ink-3)">${icon('more', 20)}</button>
       </div>
 
       ${tip ? `
@@ -217,7 +353,9 @@ function entryHtml(entry, workout, unit) {
         <span>Set</span><span>Prev</span><span>${unit.toUpperCase()}</span><span>Reps</span><span></span>
       </div>
 
-      ${entry.sets.map((set, index) => setRowHtml(set, index, entry, unit, previousLabel)).join('')}
+      ${entry.sets.map((set, i) => setRowHtml(set, i, entry, unit, previousLabel)).join('')}
+
+      <div data-plates-for="${entry.id}">${platesHtml(entry, exercise, unit)}</div>
 
       <button class="row" data-add-set="${entry.id}" style="color:var(--accent);font-weight:600">
         ${icon('plus', 18)} Add set
@@ -226,10 +364,16 @@ function entryHtml(entry, workout, unit) {
 }
 
 function setRowHtml(set, index, entry, unit, previousLabel) {
-  const number = set.warmup ? 'W' : String(entry.sets.filter((s, i) => !s.warmup && i <= index).length);
+  const number = set.warmup
+    ? 'W'
+    : String(entry.sets.filter((s, i) => !s.warmup && i <= index).length);
+
   return `
     <div class="set-row ${set.done ? 'done' : ''} ${set.warmup ? 'warmup' : ''}">
-      <span class="set-index">${number}</span>
+      <button class="set-index" data-set-options data-entry-id="${entry.id}" data-set-id="${set.id}"
+              aria-label="Options for set ${number}">
+        ${number}<span class="set-rpe">${set.rpe ? `@${set.rpe}` : ''}</span>
+      </button>
       <span class="set-prev">${set.warmup ? '' : previousLabel}</span>
       <input type="number" inputmode="decimal" step="any" min="0" data-field="weight"
              data-entry-id="${entry.id}" data-set-id="${set.id}"
@@ -243,19 +387,74 @@ function setRowHtml(set, index, entry, unit, previousLabel) {
               aria-label="${set.done ? 'Mark set incomplete' : 'Mark set complete'}">
         ${icon(set.done ? 'check' : 'circle', 25)}
       </button>
+    </div>
+    <div data-options-for="${set.id}" hidden></div>`;
+}
+
+function setOptionsHtml(workoutId, entryId, setId) {
+  const set = findSet(store.workoutById(workoutId), entryId, setId);
+  if (!set) return '';
+
+  return `
+    <div class="rpe-grid">
+      ${RPE_VALUES.map((value) => `
+        <button data-rpe="${value}" data-entry-id="${entryId}" data-set-id="${setId}"
+                aria-pressed="${set.rpe === value}">${value}</button>`).join('')}
+      <button data-rpe="" data-entry-id="${entryId}" data-set-id="${setId}"
+              aria-pressed="false">—</button>
+    </div>
+    <div class="pad muted" style="font-size:12px;padding-top:4px">
+      RPE: how hard the set felt. 10 is failure, 8 is two reps left. The coach uses it
+      to decide between adding weight and holding.
+    </div>
+    <div class="spread pad" style="padding-top:0">
+      <button class="btn btn-sm btn-quiet" data-warmup-toggle
+              data-entry-id="${entryId}" data-set-id="${setId}">
+        ${set.warmup ? 'Make working set' : 'Mark as warm-up'}
+      </button>
+      <button class="btn btn-sm btn-danger" data-drop-set
+              data-entry-id="${entryId}" data-set-id="${setId}">Delete set</button>
     </div>`;
+}
+
+/** Plate maths, shown only where a loaded bar is actually involved. */
+function platesHtml(entry, exercise, unit) {
+  if (!exercise || exercise.equipment !== 'barbell') return '';
+
+  const working = entry.sets.filter((s) => !s.warmup && s.weightKg > 0);
+  const top = working.reduce((best, s) => (s.weightKg > (best?.weightKg ?? 0) ? s : best), null);
+  if (!top) return '';
+
+  const result = platesPerSide(top.weightKg, unit);
+  if (!result) {
+    return `<div class="plates">${icon('scale', 15)} Below an empty ${DEFAULT_BAR[unit]} ${unit} bar</div>`;
+  }
+
+  const remainder = result.remainder > 0.01
+    ? ` <span style="color:var(--warn)">+${result.remainder} ${unit} short</span>`
+    : '';
+
+  return `<div class="plates">${icon('scale', 15)} Per side:
+    <strong>${describePlates(result)}</strong>${remainder}</div>`;
 }
 
 // --- Helpers -----------------------------------------------------------------
 
 function findSet(workout, entryId, setId) {
-  return workout.entries.find((e) => e.id === entryId)?.sets.find((s) => s.id === setId) ?? null;
+  return workout?.entries.find((e) => e.id === entryId)?.sets.find((s) => s.id === setId) ?? null;
 }
 
 function refreshTotals(root, workoutId, unit) {
   const workout = store.workoutById(workoutId);
   const el = root.querySelector('#totals');
   if (workout && el) el.innerHTML = totalsHtml(workout, unit);
+}
+
+function refreshPlates(root, workoutId, entryId, unit) {
+  const host = root.querySelector(`[data-plates-for="${entryId}"]`);
+  if (!host) return;
+  const entry = store.workoutById(workoutId)?.entries.find((e) => e.id === entryId);
+  if (entry) host.innerHTML = platesHtml(entry, store.exerciseById(entry.exerciseId), unit);
 }
 
 async function finish(workout) {

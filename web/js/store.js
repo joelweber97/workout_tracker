@@ -7,6 +7,8 @@ import {
   newExercise, newRoutine, newSet, newEntry, newWorkout, uid, finishWorkout,
 } from './domain.js';
 
+// Same reasoning as DB_NAME in db.js: these keys predate the app's name and
+// are left alone so existing installs keep their settings.
 const SETTINGS_KEY = 'ledger.settings';
 const SEEDED_KEY = 'ledger.seeded';
 
@@ -22,6 +24,7 @@ export const state = {
   exercises: [],
   workouts: [],
   routines: [],
+  metrics: [],
   settings: { ...DEFAULT_SETTINGS },
 };
 
@@ -64,12 +67,13 @@ export function updateSettings(patch) {
 
 export async function load() {
   state.settings = loadSettings();
-  const [exercises, workouts, routines] = await Promise.all([
-    db.getAll('exercises'), db.getAll('workouts'), db.getAll('routines'),
+  const [exercises, workouts, routines, metrics] = await Promise.all([
+    db.getAll('exercises'), db.getAll('workouts'), db.getAll('routines'), db.getAll('metrics'),
   ]);
   state.exercises = exercises;
   state.workouts = workouts;
   state.routines = routines;
+  state.metrics = metrics;
 
   if (!localStorage.getItem(SEEDED_KEY)) await seed();
   sortAll();
@@ -82,8 +86,14 @@ export async function load() {
  */
 async function seed() {
   const byName = new Map();
-  const exercises = EXERCISE_LIBRARY.map(([name, muscleGroup, equipment]) => {
-    const exercise = newExercise({ name, muscleGroup, equipment });
+  const exercises = EXERCISE_LIBRARY.map(([name, muscleGroup, equipment, secondary, description]) => {
+    const exercise = newExercise({
+      name,
+      muscleGroup,
+      equipment,
+      description,
+      secondary: secondary ? secondary.split(',') : [],
+    });
     byName.set(name, exercise);
     return exercise;
   });
@@ -107,6 +117,7 @@ function sortAll() {
   state.exercises.sort((a, b) => a.name.localeCompare(b.name));
   state.workouts.sort((a, b) => b.startedAt - a.startedAt);
   state.routines.sort((a, b) => a.name.localeCompare(b.name));
+  state.metrics.sort((a, b) => b.recordedAt - a.recordedAt);
 }
 
 // --- Lookups ----------------------------------------------------------------
@@ -231,6 +242,59 @@ export async function deleteRoutine(id) {
   notify();
 }
 
+// --- Body weight -------------------------------------------------------------
+
+/**
+ * One reading per day: logging again on the same day replaces that day's entry
+ * rather than stacking two points on the chart.
+ */
+export async function logBodyWeight(weightKg, when = Date.now()) {
+  const day = new Date(when);
+  day.setHours(12, 0, 0, 0);
+  const id = `bw-${day.toISOString().slice(0, 10)}`;
+  const record = { id, recordedAt: day.getTime(), weightKg };
+
+  await db.put('metrics', record);
+  const index = state.metrics.findIndex((m) => m.id === id);
+  if (index >= 0) state.metrics[index] = record;
+  else state.metrics.push(record);
+  sortAll();
+  notify();
+  return record;
+}
+
+export async function deleteBodyWeight(id) {
+  await db.remove('metrics', id);
+  state.metrics = state.metrics.filter((m) => m.id !== id);
+  notify();
+}
+
+export const latestBodyWeight = () => state.metrics[0] ?? null;
+
+// --- Repeating a session -----------------------------------------------------
+
+/**
+ * Starts a session with the same exercises as a previous one, sets blanked out
+ * but pre-filled with what was lifted last time.
+ */
+export async function repeatWorkout(sourceId) {
+  const existing = activeWorkout();
+  if (existing) return existing;
+
+  const source = workoutById(sourceId);
+  if (!source) return null;
+
+  const workout = newWorkout(source.name);
+  workout.entries = source.entries.map((entry) => ({
+    ...newEntry(entry.exerciseId, entry.sets
+      .filter((set) => !set.warmup)
+      .map((set) => newSet({ reps: set.reps, weightKg: set.weightKg }))),
+    group: entry.group ?? null,
+  }));
+
+  return saveWorkout(workout);
+}
+
 // --- Backup -----------------------------------------------------------------
 
 export function exportData() {
@@ -241,23 +305,26 @@ export function exportData() {
     exercises: state.exercises,
     workouts: state.workouts,
     routines: state.routines,
+    metrics: state.metrics,
   }, null, 2);
 }
 
 export async function importData(json) {
   const parsed = JSON.parse(json);
   if (!Array.isArray(parsed.exercises) || !Array.isArray(parsed.workouts)) {
-    throw new Error('That file doesn’t look like a Ledger backup.');
+    throw new Error('That file doesn’t look like an Overload backup.');
   }
   await db.clearAll();
   await Promise.all([
     db.putMany('exercises', parsed.exercises),
     db.putMany('workouts', parsed.workouts),
     db.putMany('routines', parsed.routines ?? []),
+    db.putMany('metrics', parsed.metrics ?? []),
   ]);
   state.exercises = parsed.exercises;
   state.workouts = parsed.workouts;
   state.routines = parsed.routines ?? [];
+  state.metrics = parsed.metrics ?? [];
   localStorage.setItem(SEEDED_KEY, '1');
   sortAll();
   notify();
@@ -269,6 +336,7 @@ export async function resetEverything() {
   state.exercises = [];
   state.workouts = [];
   state.routines = [];
+  state.metrics = [];
   await load();
 }
 

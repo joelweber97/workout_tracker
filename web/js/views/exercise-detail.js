@@ -71,9 +71,16 @@ export default function renderExerciseDetail(root, exerciseId) {
         )}
       </div></div>` : ''}
 
+    ${exercise.description ? `
+      <div class="section-title">How to do it</div>
+      <div class="card"><div class="pad" style="line-height:1.55">${esc(exercise.description)}</div></div>` : ''}
+
     <div class="section-title">Details</div>
     <div class="card">
-      <div class="row"><div class="row-main muted">Muscle group</div><span>${groupLabel(exercise.muscleGroup)}</span></div>
+      <div class="row"><div class="row-main muted">Primary</div><span>${groupLabel(exercise.muscleGroup)}</span></div>
+      ${exercise.secondary && exercise.secondary.length ? `
+        <div class="row"><div class="row-main muted">Also works</div>
+          <span>${exercise.secondary.map(groupLabel).join(', ')}</span></div>` : ''}
       <div class="row"><div class="row-main muted">Equipment</div><span>${equipmentLabel(exercise.equipment)}</span></div>
       ${exercise.notes ? `<div class="pad muted">${esc(exercise.notes)}</div>` : ''}
     </div>

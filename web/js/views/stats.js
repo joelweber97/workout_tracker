@@ -1,12 +1,12 @@
 import * as store from '../store.js';
 import { chrome } from '../app.js';
-import { onClick, tile, emptyState } from '../ui.js';
-import { esc, volume, fromKg, formatDay } from '../format.js';
+import { onClick, tile, emptyState, icon, promptNumber, toast } from '../ui.js';
+import { esc, volume, fromKg, toKg, weightValue, formatDay } from '../format.js';
 import {
   weeklyVolume, volumeByRegion, weeklyStreak, workoutVolume, entryVolume,
   completedSets, REGION_COLORS,
 } from '../domain.js';
-import { barChart, barList } from '../charts.js';
+import { barChart, barList, lineChart } from '../charts.js';
 
 const WINDOWS = [
   { weeks: 8, label: '8 wk' },
@@ -27,6 +27,18 @@ export default function renderStats(root) {
     paint(root);
   });
 
+  onClick(root, '[data-log-weight]', async () => {
+    const { unit } = store.state.settings;
+    const last = store.latestBodyWeight();
+    const value = await promptNumber('Body weight', {
+      value: last ? weightValue(last.weightKg, unit) : '',
+      unit: `In ${unit}. Logging again today replaces today's reading.`,
+    });
+    if (value == null) return;
+    await store.logBodyWeight(toKg(value, unit));
+    toast('Body weight logged');
+  });
+
   paint(root);
 }
 
@@ -39,7 +51,8 @@ function paint(root) {
     root.innerHTML = emptyState(
       'Nothing to chart yet',
       'Finish a workout or two and your trends show up here.',
-    );
+    ) + `<div class="section-title">Body weight</div>
+      <div class="card">${bodyWeightHtml(unit)}</div>`;
     return;
   }
 
@@ -81,6 +94,9 @@ function paint(root) {
       ) : '<div class="pad muted">No completed sets in this range.</div>'}
     </div>
 
+    <div class="section-title">Body weight</div>
+    <div class="card">${bodyWeightHtml(unit)}</div>
+
     <div class="section-title">Most trained</div>
     <div class="card">
       ${rank(inWindow).slice(0, 6).map((item) => `
@@ -115,4 +131,45 @@ function rank(workouts) {
   return [...totals.entries()]
     .map(([name, v]) => ({ name, ...v }))
     .sort((a, b) => b.volumeKg - a.volumeKg);
+}
+
+/**
+ * Body weight over time. Muscle growth is half a scale question, and the app
+ * has no other way to know whether a stalled bench is a recovery problem or
+ * simply a calorie one.
+ */
+function bodyWeightHtml(unit) {
+  const points = [...store.state.metrics].sort((a, b) => a.recordedAt - b.recordedAt);
+  const log = `<button class="row" data-log-weight style="color:var(--accent);font-weight:600">
+      ${icon('plus', 18)} Log body weight
+    </button>`;
+
+  if (!points.length) {
+    return `<div class="pad muted">Nothing logged yet. Weekly is plenty — daily readings
+      mostly measure water.</div>${log}`;
+  }
+
+  const latest = points[points.length - 1];
+  const first = points[0];
+  const change = fromKg(latest.weightKg - first.weightKg, unit);
+  const sign = change >= 0 ? '+' : '';
+  const span = points.length > 1
+    ? `${sign}${change.toFixed(1)} ${unit} since ${formatDay(first.recordedAt)}`
+    : 'One reading so far';
+
+  const chart = points.length >= 2
+    ? `<div class="pad">${lineChart(
+        points.map((p) => ({ label: formatDay(p.recordedAt), value: fromKg(p.weightKg, unit) })),
+        { format: (v) => v.toFixed(0) },
+      )}</div>`
+    : '';
+
+  return `
+    <div class="row">
+      <div class="row-main">
+        <div class="row-title">${weightValue(latest.weightKg, unit)} ${unit}</div>
+        <div class="row-sub">${esc(span)}</div>
+      </div>
+    </div>
+    ${chart}${log}`;
 }

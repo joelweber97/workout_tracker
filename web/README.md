@@ -1,4 +1,4 @@
-# Ledger (web)
+# Overload (web)
 
 The installable web app. Plain ES modules, no build step, no dependencies —
 open `index.html` through any static server and it runs.
@@ -14,6 +14,7 @@ web/
     ├── app.js              router + shell
     ├── domain.js           data shapes and derived numbers (pure)
     ├── coach.js            progression engine — what weight to use next
+    ├── gym.js              plate maths and warm-up ramps
     ├── ai.js               builds the briefing you paste into Claude
     ├── stats-free helpers  format.js, charts.js, ui.js, rest.js
     ├── db.js / store.js    IndexedDB and app state
@@ -36,3 +37,8 @@ web/
   and write on a debounce. A re-render would blur the field mid-entry.
 - **A workout document carries its entries and sets inline.** IndexedDB isn't
   relational and the UI always wants the whole session at once.
+- **The IndexedDB database is still called `ledger`**, as are the localStorage
+  keys. They were named before the app was; renaming them would orphan every
+  workout already logged on someone's device.
+- **`domain.js` counts secondary muscles as half a set.** A row trains the
+  biceps, but not the way a curl does.

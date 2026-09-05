@@ -1,4 +1,4 @@
-# Ledger
+# Overload
 
 A workout tracker that logs your lifts and tells you what weight to use next.
 
@@ -14,9 +14,9 @@ WorkoutTracker.xcodeproj
 
 ## The web app
 
-No dependencies, no bundler, no network. Everything — the ~217-exercise
-library, your sessions, the progression engine — runs on-device and works
-offline. Installs to the iOS home screen with its own icon.
+No dependencies, no bundler, no network. Everything — the 217-exercise library,
+your sessions, the progression engine — runs on-device and works offline.
+Installs to the iOS home screen with its own icon.
 
 ### Run it locally
 
@@ -41,11 +41,11 @@ support to work — GitHub Pages is HTTPS by default.
 | Screen | What it does |
 |---|---|
 | **Today** | Week-to-date sessions, volume and streak; start an empty session or one from a routine; resume one in progress |
-| **Active workout** | Weight and reps per set, warm-up sets, last session's numbers inline, a suggested working weight, automatic rest timer, live volume |
+| **Active workout** | Weight, reps and RPE per set, warm-up ramps, plate maths, last session's numbers inline, a suggested working weight, personal-record alerts, supersets, automatic rest timer |
 | **History** | Every finished session by month, down to individual sets |
 | **Exercises** | The library grouped by muscle, with per-exercise records and an estimated-1RM trend |
-| **Stats** | Weekly volume, split by body region, most-trained movements over 8 / 12 / 26 weeks |
-| **Coach** | Progression suggestions, programme-level observations, and a briefing to paste into Claude |
+| **Stats** | Weekly volume, split by body region, most-trained movements over 8 / 12 / 26 weeks, and body weight over time |
+| **Coach** | Weekly hard sets per muscle against the 10–20 range, progression suggestions, programme-level observations, and a briefing to paste into Claude |
 
 ## How the coaching works
 
@@ -66,6 +66,14 @@ plate pairs; a cable stack doesn't). On top of that:
   weight; 7 or below earns a double jump.
 - **Estimated 1RM** uses Epley (`weight × (1 + reps/30)`), with a single rep
   taken at face value.
+
+Around it sit the things you actually need on the gym floor: **plate maths**
+(what goes on each side, and how far short you are when the plates can't make
+the number), a **warm-up ramp** at roughly 40/60/80% of your working weight,
+**personal-record detection** the moment you tick the set, and **weekly hard
+sets per muscle** against the 10–20 range — with an exercise's secondary
+muscles counted as half a set, since a row trains the biceps but not the way a
+curl does.
 
 **The Claude layer (`web/js/ai.js`)** handles the qualitative half — programme
 critique, what to change and why. It builds a compact briefing of your last six
