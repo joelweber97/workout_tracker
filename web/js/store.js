@@ -139,14 +139,34 @@ export const visibleExercises = () => state.exercises.filter((e) => !e.archived)
 
 // --- Workouts ---------------------------------------------------------------
 
-async function saveWorkout(workout) {
-  await db.put('workouts', workout);
+/**
+ * In-memory state is updated first and persisted afterwards.
+ *
+ * The reverse order — awaiting IndexedDB before swapping the object into
+ * `state` — leaves a window where the store still returns the pre-edit
+ * workout. Click handlers don't await, so anything that ran in that window
+ * read stale data: tapping Use and then Finish reported the session as empty,
+ * because Finish looked at a copy where the sets had never been filled in.
+ */
+function applyWorkout(workout) {
   const index = state.workouts.findIndex((w) => w.id === workout.id);
   if (index >= 0) state.workouts[index] = workout;
   else state.workouts.unshift(workout);
   sortAll();
   notify();
-  return workout;
+
+  return db.put('workouts', workout)
+    .then(() => workout)
+    .catch((error) => {
+      // The change is already on screen; losing the write silently would be
+      // worse than saying so.
+      console.error('Failed to save workout', error);
+      return workout;
+    });
+}
+
+function saveWorkout(workout) {
+  return applyWorkout(workout);
 }
 
 /**
@@ -196,22 +216,29 @@ export async function finishActiveWorkout(id) {
   return saveWorkout(finished);
 }
 
-export async function deleteWorkout(id) {
-  await db.remove('workouts', id);
+export function deleteWorkout(id) {
   state.workouts = state.workouts.filter((w) => w.id !== id);
   notify();
+  return db.remove('workouts', id).catch((error) => {
+    console.error('Failed to delete workout', error);
+  });
 }
 
 // --- Exercises --------------------------------------------------------------
 
-export async function saveExercise(exercise) {
-  await db.put('exercises', exercise);
+export function saveExercise(exercise) {
   const index = state.exercises.findIndex((e) => e.id === exercise.id);
   if (index >= 0) state.exercises[index] = exercise;
   else state.exercises.push(exercise);
   sortAll();
   notify();
-  return exercise;
+
+  return db.put('exercises', exercise)
+    .then(() => exercise)
+    .catch((error) => {
+      console.error('Failed to save exercise', error);
+      return exercise;
+    });
 }
 
 export function createExercise(fields) {
@@ -230,24 +257,31 @@ export function archiveExercise(id) {
 
 // --- Routines ---------------------------------------------------------------
 
-export async function saveRoutine(routine) {
-  await db.put('routines', routine);
+export function saveRoutine(routine) {
   const index = state.routines.findIndex((r) => r.id === routine.id);
   if (index >= 0) state.routines[index] = routine;
   else state.routines.push(routine);
   sortAll();
   notify();
-  return routine;
+
+  return db.put('routines', routine)
+    .then(() => routine)
+    .catch((error) => {
+      console.error('Failed to save routine', error);
+      return routine;
+    });
 }
 
 export function createRoutine(name = 'New routine') {
   return saveRoutine(newRoutine(name));
 }
 
-export async function deleteRoutine(id) {
-  await db.remove('routines', id);
+export function deleteRoutine(id) {
   state.routines = state.routines.filter((r) => r.id !== id);
   notify();
+  return db.remove('routines', id).catch((error) => {
+    console.error('Failed to delete routine', error);
+  });
 }
 
 // --- Body weight -------------------------------------------------------------
@@ -272,19 +306,24 @@ export async function logBodyMetrics({ weightKg, bodyFatPct } = {}, when = Date.
     bodyFatPct: bodyFatPct ?? existing?.bodyFatPct ?? null,
   };
 
-  await db.put('metrics', record);
   const index = state.metrics.findIndex((m) => m.id === id);
   if (index >= 0) state.metrics[index] = record;
   else state.metrics.push(record);
   sortAll();
   notify();
+
+  await db.put('metrics', record).catch((error) => {
+    console.error('Failed to save body metrics', error);
+  });
   return record;
 }
 
-export async function deleteBodyWeight(id) {
-  await db.remove('metrics', id);
+export function deleteBodyWeight(id) {
   state.metrics = state.metrics.filter((m) => m.id !== id);
   notify();
+  return db.remove('metrics', id).catch((error) => {
+    console.error('Failed to delete body metrics', error);
+  });
 }
 
 export const latestBodyMetrics = () => state.metrics[0] ?? null;

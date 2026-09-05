@@ -32,6 +32,11 @@ web/
 - **Views get a fresh container each render** (`app.js`). Delegated listeners
   attach to that container, so they're discarded with it. Attaching to a
   persistent element stacks a listener per visit — one tap then fires N times.
+- **State is updated before it is persisted.** Every writer in `store.js`
+  applies the change to `state` and notifies, then writes to IndexedDB.
+  Awaiting the write first leaves a window where the store still returns the
+  old object, and click handlers do not await — that window is what made a
+  finished workout report itself as empty.
 - **Typing never re-renders.** Weight, rep, and name fields call
   `store.mutateWorkoutSilently` / `saveRoutineSilently`, which mutate in place
   and write on a debounce. A re-render would blur the field mid-entry.
