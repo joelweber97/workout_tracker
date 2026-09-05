@@ -35,7 +35,7 @@ export default function renderWorkout(root, workoutId) {
   chrome.setLead(`<button class="icon-btn" data-back aria-label="Back">${icon('back')}</button>`);
   chrome.setActions('<button class="icon-btn" data-finish>Finish</button>');
   chrome.onLead('[data-back]', () => navigate('#/today'));
-  chrome.onAction('[data-finish]', () => finish(workout));
+  chrome.onAction('[data-finish]', () => finish(workoutId));
 
   root.innerHTML = `
     <div class="tiles" id="totals">${totalsHtml(workout, unit)}</div>
@@ -198,6 +198,10 @@ export default function renderWorkout(root, workoutId) {
         if (set.done || set.warmup) continue;
         set.weightKg = parseFloat(weight);
         set.reps = parseInt(reps, 10);
+        // Accepting a suggestion is as deliberate as typing the numbers in.
+        // Without this, using Use and then finishing without ticking reports
+        // the session as empty.
+        set.touched = true;
       }
     });
     toast('Applied to remaining sets');
@@ -473,13 +477,18 @@ function refreshPlates(root, workoutId, entryId, unit) {
  * silently discarding it — which is what this used to do — is the worst
  * possible outcome for someone who has just trained.
  */
-async function finish(workout) {
+async function finish(workoutId) {
+  // Read it now rather than trusting whatever was captured at render time:
+  // every structural edit replaces this object in the store.
+  const workout = store.workoutById(workoutId);
+  if (!workout) { navigate('#/today'); return; }
+
   const ticked = workoutSetCount(workout);
   const pending = pendingSets(workout);
 
   if (ticked === 0 && pending.length === 0) {
     if (!window.confirm('Nothing was logged. Discard this session?')) return;
-    await close(workout);
+    await close(workoutId);
     return;
   }
 
@@ -508,13 +517,13 @@ async function finish(workout) {
   if (choice === 'discard') {
     if (!window.confirm('Discard this session? It cannot be recovered.')) return;
     restTimer.stop();
-    await store.deleteWorkout(workout.id);
+    await store.deleteWorkout(workoutId);
     navigate('#/today');
     return;
   }
 
   if (choice === 'all') {
-    await store.mutateWorkout(workout.id, (w) => {
+    await store.mutateWorkout(workoutId, (w) => {
       for (const entry of w.entries) {
         for (const set of entry.sets) {
           if (!set.done && !set.warmup && set.touched && set.reps > 0) {
@@ -526,13 +535,13 @@ async function finish(workout) {
     });
   }
 
-  await close(store.workoutById(workout.id) ?? workout);
+  await close(workoutId);
 }
 
-async function close(workout) {
+async function close(workoutId) {
   restTimer.stop();
-  await store.flushWorkout(workout.id);
-  await store.finishActiveWorkout(workout.id);
+  await store.flushWorkout(workoutId);
+  await store.finishActiveWorkout(workoutId);
   navigate('#/today');
 }
 

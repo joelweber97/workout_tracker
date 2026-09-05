@@ -62,6 +62,7 @@ export default function renderSettings(root) {
     <div class="section-title">About</div>
     <div class="card">
       <div class="row"><div class="row-main muted">Version</div><span>0.1.0</span></div>
+      <div class="row"><div class="row-main muted">Build</div><span id="build-id">—</span></div>
       <div class="row"><div class="row-main muted">Exercises</div><span>${store.state.exercises.length}</span></div>
       <div class="row"><div class="row-main muted">Sessions</div><span>${store.state.workouts.filter((w) => w.endedAt).length}</span></div>
     </div>`;
@@ -77,6 +78,7 @@ export default function renderSettings(root) {
   });
 
   showPersistence(root);
+  showBuild(root);
 
   onClick(root, '[data-export]', () => {
     const blob = new Blob([store.exportData()], { type: 'application/json' });
@@ -115,6 +117,21 @@ export default function renderSettings(root) {
     toast('Reset');
     navigate('#/today');
   });
+}
+
+/**
+ * The name of the active cache is the running build. Reading it at runtime
+ * beats hardcoding a number that can drift from what is actually installed.
+ */
+async function showBuild(root) {
+  const el = root.querySelector('#build-id');
+  if (!el) return;
+  try {
+    const keys = await caches.keys();
+    el.textContent = keys[0] ?? 'not cached';
+  } catch {
+    el.textContent = 'unavailable';
+  }
 }
 
 /**
