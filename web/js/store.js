@@ -75,14 +75,22 @@ export async function load() {
   state.routines = routines;
   state.metrics = metrics;
 
-  if (!localStorage.getItem(SEEDED_KEY)) await seed();
+  // The flag lives in localStorage but the library lives in IndexedDB, and the
+  // two can be cleared independently. Checking both stops a cleared flag from
+  // seeding a second copy of all 217 exercises on top of the existing ones.
+  if (!localStorage.getItem(SEEDED_KEY)) {
+    if (state.exercises.length) localStorage.setItem(SEEDED_KEY, '1');
+    else await seed();
+  }
   sortAll();
   notify();
 }
 
 /**
- * Runs once per install. Guarded by a flag rather than an empty-store check, so
- * someone who deletes the starter library doesn't get it back on next launch.
+ * Runs once per install. The caller checks both a localStorage flag and whether
+ * the library is actually empty: the flag alone lets someone who archived every
+ * starter exercise keep it that way, while the emptiness check stops a cleared
+ * flag from duplicating a library that is still sitting in IndexedDB.
  */
 async function seed() {
   const byName = new Map();
