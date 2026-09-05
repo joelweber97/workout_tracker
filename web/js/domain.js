@@ -30,6 +30,21 @@ export function region(group) {
 
 export const REGION_COLORS = { Upper: 'var(--upper)', Lower: 'var(--lower)', Other: 'var(--other)' };
 
+/**
+ * Lean mass: everything that isn't fat. Two people can both gain three pounds
+ * and only one of them gained muscle, which is the whole reason to log body fat
+ * alongside weight. Null when body fat wasn't recorded that day.
+ */
+export function leanMassKg(record) {
+  if (!record || record.bodyFatPct == null || !record.weightKg) return null;
+  return record.weightKg * (1 - record.bodyFatPct / 100);
+}
+
+export function fatMassKg(record) {
+  if (!record || record.bodyFatPct == null || !record.weightKg) return null;
+  return record.weightKg * (record.bodyFatPct / 100);
+}
+
 /** The weekly hard-set range most hypertrophy research converges on. */
 export const SET_TARGET = { min: 10, max: 20 };
 

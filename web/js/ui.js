@@ -108,39 +108,60 @@ export function actionSheet(title, items) {
   });
 }
 
-/** Bottom sheet with a single numeric field. Resolves with a number or null. */
-export function promptNumber(title, { value = '', unit = '', step = 'any', placeholder = '' } = {}) {
+/**
+ * Bottom sheet with one or more numeric fields. Resolves with an object keyed
+ * by field name, or null if dismissed. Blank fields come back as null rather
+ * than 0, so "I didn't measure that today" stays distinct from "it was zero".
+ */
+export function promptNumbers(title, fields, { note = '' } = {}) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'sheet-backdrop';
     overlay.innerHTML = `
       <div class="sheet" role="dialog" aria-label="${title}">
         <div class="sheet-title">${title}</div>
-        <div class="pad">
-          <input type="number" inputmode="decimal" step="${step}" value="${value}"
-                 placeholder="${placeholder}" aria-label="${title}">
-          ${unit ? `<div class="muted" style="margin-top:6px;font-size:13px">${unit}</div>` : ''}
-        </div>
+        ${fields.map((field) => `
+          <div class="field">
+            <label for="f-${field.name}">${field.label}</label>
+            <input id="f-${field.name}" data-name="${field.name}" type="number"
+                   inputmode="decimal" step="${field.step ?? 'any'}"
+                   value="${field.value ?? ''}" placeholder="${field.placeholder ?? ''}"
+                   ${field.min != null ? `min="${field.min}"` : ''}
+                   ${field.max != null ? `max="${field.max}"` : ''}>
+          </div>`).join('')}
+        ${note ? `<div class="pad muted" style="font-size:12px">${note}</div>` : ''}
         <button class="sheet-item" data-save>Save</button>
         <button class="sheet-item cancel" data-cancel>Cancel</button>
       </div>`;
 
-    const input = overlay.querySelector('input');
     const close = (result) => { overlay.remove(); resolve(result); };
+
+    const save = () => {
+      const values = {};
+      let any = false;
+      for (const input of overlay.querySelectorAll('[data-name]')) {
+        const parsed = parseFloat(input.value);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          values[input.dataset.name] = parsed;
+          any = true;
+        } else {
+          values[input.dataset.name] = null;
+        }
+      }
+      close(any ? values : null);
+    };
 
     overlay.addEventListener('click', (event) => {
       if (event.target === overlay || event.target.closest('[data-cancel]')) { close(null); return; }
-      if (event.target.closest('[data-save]')) {
-        const parsed = parseFloat(input.value);
-        close(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
-      }
+      if (event.target.closest('[data-save]')) save();
     });
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') overlay.querySelector('[data-save]').click();
+    overlay.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') save();
     });
 
     document.body.appendChild(overlay);
-    input.focus();
-    input.select();
+    const first = overlay.querySelector('input');
+    first.focus();
+    first.select();
   });
 }

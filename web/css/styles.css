@@ -212,6 +212,8 @@ button.row:active, a.row:active { background: var(--surface-2); }
 }
 
 .tile {
+  display: flex;
+  flex-direction: column;
   padding: 12px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -222,8 +224,12 @@ button.row:active, a.row:active { background: var(--surface-2); }
   font-size: 12px;
   color: var(--ink-2);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
+  /* Two lines are always reserved, so a label that wraps ('Lean mass') doesn't
+     drop its number out of line with the tiles beside it. */
+  min-height: 2.5em;
+  line-height: 1.25;
 }
 
 .tile-value {
@@ -722,4 +728,31 @@ textarea { resize: vertical; min-height: 72px; }
   color: var(--ink-2);
   border-bottom: 1px solid var(--line);
   background: var(--surface-2);
+}
+
+/* --- Chart legend --------------------------------------------------------- */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 0 2px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.section-label {
+  margin: 14px 0 2px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink-3);
 }

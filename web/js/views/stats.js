@@ -1,12 +1,13 @@
 import * as store from '../store.js';
 import { chrome } from '../app.js';
-import { onClick, tile, emptyState, icon, promptNumber, toast } from '../ui.js';
+import { onClick, tile, emptyState, icon, promptNumbers, toast } from '../ui.js';
 import { esc, volume, fromKg, toKg, weightValue, formatDay } from '../format.js';
 import {
   weeklyVolume, volumeByRegion, weeklyStreak, workoutVolume, entryVolume,
   completedSets, REGION_COLORS,
+  leanMassKg,
 } from '../domain.js';
-import { barChart, barList, lineChart } from '../charts.js';
+import { barChart, barList, lineChart, multiLineChart } from '../charts.js';
 
 const WINDOWS = [
   { weeks: 8, label: '8 wk' },
@@ -29,14 +30,37 @@ export default function renderStats(root) {
 
   onClick(root, '[data-log-weight]', async () => {
     const { unit } = store.state.settings;
-    const last = store.latestBodyWeight();
-    const value = await promptNumber('Body weight', {
-      value: last ? weightValue(last.weightKg, unit) : '',
-      unit: `In ${unit}. Logging again today replaces today's reading.`,
+    // Prefill from the most recent day that recorded each field, not the most
+    // recent day overall — body fat is usually measured less often than weight.
+    const lastWeight = store.latestWith('weightKg');
+    const lastFat = store.latestWith('bodyFatPct');
+
+    const values = await promptNumbers('Body composition', [
+      {
+        name: 'weight',
+        label: `Weight (${unit})`,
+        value: lastWeight ? weightValue(lastWeight.weightKg, unit) : '',
+        min: 0,
+      },
+      {
+        name: 'bodyFat',
+        label: 'Body fat (%)',
+        value: lastFat ? lastFat.bodyFatPct : '',
+        step: '0.1',
+        min: 1,
+        max: 70,
+        placeholder: 'optional',
+      },
+    ], {
+      note: 'Leave either blank to skip it. Logging again today updates today’s reading.',
     });
-    if (value == null) return;
-    await store.logBodyWeight(toKg(value, unit));
-    toast('Body weight logged');
+
+    if (!values) return;
+    await store.logBodyMetrics({
+      weightKg: values.weight != null ? toKg(values.weight, unit) : null,
+      bodyFatPct: values.bodyFat,
+    });
+    toast('Logged');
   });
 
   paint(root);
@@ -51,8 +75,8 @@ function paint(root) {
     root.innerHTML = emptyState(
       'Nothing to chart yet',
       'Finish a workout or two and your trends show up here.',
-    ) + `<div class="section-title">Body weight</div>
-      <div class="card">${bodyWeightHtml(unit)}</div>`;
+    ) + `<div class="section-title">Body composition</div>
+      <div class="card">${bodyCompositionHtml(unit)}</div>`;
     return;
   }
 
@@ -94,8 +118,8 @@ function paint(root) {
       ) : '<div class="pad muted">No completed sets in this range.</div>'}
     </div>
 
-    <div class="section-title">Body weight</div>
-    <div class="card">${bodyWeightHtml(unit)}</div>
+    <div class="section-title">Body composition</div>
+    <div class="card">${bodyCompositionHtml(unit)}</div>
 
     <div class="section-title">Most trained</div>
     <div class="card">
@@ -134,42 +158,89 @@ function rank(workouts) {
 }
 
 /**
- * Body weight over time. Muscle growth is half a scale question, and the app
- * has no other way to know whether a stalled bench is a recovery problem or
- * simply a calorie one.
+ * Body composition. Weight and lean mass share a unit so they share one chart;
+ * body fat is a percentage and gets its own, because putting a second y-scale
+ * behind it would invite comparisons between two things that aren't comparable.
  */
-function bodyWeightHtml(unit) {
+function bodyCompositionHtml(unit) {
   const points = [...store.state.metrics].sort((a, b) => a.recordedAt - b.recordedAt);
   const log = `<button class="row" data-log-weight style="color:var(--accent);font-weight:600">
-      ${icon('plus', 18)} Log body weight
+      ${icon('plus', 18)} Log weight and body fat
     </button>`;
 
   if (!points.length) {
     return `<div class="pad muted">Nothing logged yet. Weekly is plenty — daily readings
-      mostly measure water.</div>${log}`;
+      mostly measure water. Body fat is optional; log it when you have a number worth trusting.</div>${log}`;
   }
 
-  const latest = points[points.length - 1];
-  const first = points[0];
-  const change = fromKg(latest.weightKg - first.weightKg, unit);
-  const sign = change >= 0 ? '+' : '';
-  const span = points.length > 1
-    ? `${sign}${change.toFixed(1)} ${unit} since ${formatDay(first.recordedAt)}`
-    : 'One reading so far';
+  const weights = points.filter((p) => p.weightKg != null);
+  const fats = points.filter((p) => p.bodyFatPct != null);
+  const leans = points.filter((p) => leanMassKg(p) != null);
+  const latestWeight = weights[weights.length - 1] ?? null;
+  const latestFat = fats[fats.length - 1] ?? null;
 
-  const chart = points.length >= 2
-    ? `<div class="pad">${lineChart(
-        points.map((p) => ({ label: formatDay(p.recordedAt), value: fromKg(p.weightKg, unit) })),
-        { format: (v) => v.toFixed(0) },
-      )}</div>`
+  const delta = (list, read) => {
+    if (list.length < 2) return null;
+    const change = read(list[list.length - 1]) - read(list[0]);
+    return `${change >= 0 ? '+' : ''}${change.toFixed(1)}`;
+  };
+
+  const tiles = `<div class="tiles" style="padding:12px">
+    ${tile({
+      label: 'Weight',
+      value: latestWeight ? `${weightValue(latestWeight.weightKg, unit)} ${unit}` : '—',
+      caption: delta(weights, (p) => fromKg(p.weightKg, unit))
+        ? `${delta(weights, (p) => fromKg(p.weightKg, unit))} ${unit}` : 'first reading',
+      iconName: 'scale',
+    })}
+    ${tile({
+      label: 'Body fat',
+      value: latestFat ? `${latestFat.bodyFatPct.toFixed(1)}%` : '—',
+      caption: delta(fats, (p) => p.bodyFatPct)
+        ? `${delta(fats, (p) => p.bodyFatPct)} pts` : 'not logged',
+      iconName: 'body',
+    })}
+    ${tile({
+      label: 'Lean mass',
+      value: leans.length
+        ? `${weightValue(leanMassKg(leans[leans.length - 1]), unit)} ${unit}` : '—',
+      caption: delta(leans, (p) => fromKg(leanMassKg(p), unit))
+        ? `${delta(leans, (p) => fromKg(leanMassKg(p), unit))} ${unit}` : 'needs body fat',
+      iconName: 'stats',
+    })}
+  </div>`;
+
+  // Two series in the same unit, so one axis is honest here.
+  const massChart = multiLineChart([
+    {
+      label: `Weight (${unit})`,
+      color: 'var(--accent)',
+      points: weights.map((p) => ({ label: formatDay(p.recordedAt), value: fromKg(p.weightKg, unit) })),
+    },
+    {
+      label: `Lean mass (${unit})`,
+      color: 'var(--upper)',
+      points: leans.map((p) => ({ label: formatDay(p.recordedAt), value: fromKg(leanMassKg(p), unit) })),
+    },
+  ], { format: (v) => v.toFixed(0) });
+
+  const fatChart = fats.length >= 2
+    ? `<div class="section-label">Body fat (%)</div>${lineChart(
+        fats.map((p) => ({ label: formatDay(p.recordedAt), value: p.bodyFatPct })),
+        { height: 120, format: (v) => v.toFixed(0) },
+      )}`
     : '';
 
-  return `
-    <div class="row">
-      <div class="row-main">
-        <div class="row-title">${weightValue(latest.weightKg, unit)} ${unit}</div>
-        <div class="row-sub">${esc(span)}</div>
-      </div>
-    </div>
-    ${chart}${log}`;
+  const charts = massChart || fatChart
+    ? `<div class="pad" style="padding-top:0">${massChart}${fatChart}</div>`
+    : '';
+
+  const hint = !fats.length
+    ? `<div class="pad muted" style="font-size:12px;padding-top:0">
+        Add a body fat reading and this also tracks lean mass — the number that
+        separates gaining muscle from just gaining weight.
+      </div>`
+    : '';
+
+  return `${tiles}${charts}${hint}${log}`;
 }

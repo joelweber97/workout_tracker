@@ -102,3 +102,62 @@ export function barList(items, { format = String, color = () => 'var(--accent)' 
       <span class="hbar-value">${esc(format(item.value))}</span>
     </div>`).join('');
 }
+
+/**
+ * Several line series on one shared axis. Only for measures in the same unit —
+ * a second y-scale makes two unrelated shapes look comparable when they aren't,
+ * which is the fastest way to mislead someone with a chart.
+ *
+ * Every series is direct-labelled at its final point as well as listed in the
+ * legend, so which line is which never rests on colour alone.
+ */
+export function multiLineChart(series, { height = 170, format = String } = {}) {
+  const drawable = series.filter((s) => s.points.length >= 2);
+  if (!drawable.length) return '';
+
+  const all = drawable.flatMap((s) => s.points.map((p) => p.value));
+  const max = Math.max(...all);
+  const min = Math.min(...all);
+  const span = max - min || max * 0.1 || 1;
+  const top = max + span * 0.15;
+  const bottom = Math.max(0, min - span * 0.15);
+
+  const padLeft = 34;
+  const padRight = 40;
+  const padBottom = 18;
+  const padTop = 6;
+  const plotWidth = WIDTH - padLeft - padRight;
+  const plotHeight = height - padBottom - padTop;
+  const count = Math.max(...drawable.map((s) => s.points.length));
+
+  const x = (i, n) => padLeft + (n === 1 ? plotWidth : (i / (n - 1)) * plotWidth);
+  const y = (v) => padTop + plotHeight - ((v - bottom) / (top - bottom)) * plotHeight;
+
+  const grid = [bottom, (bottom + top) / 2, top].map((value) => `
+    <line class="grid" x1="${padLeft}" y1="${y(value).toFixed(1)}" x2="${WIDTH - padRight}" y2="${y(value).toFixed(1)}"/>
+    <text class="axis" x="${padLeft - 5}" y="${(y(value) + 3.5).toFixed(1)}" text-anchor="end">${esc(format(value))}</text>`).join('');
+
+  const lines = drawable.map((s) => {
+    const n = s.points.length;
+    const path = s.points.map((p, i) => `${i ? 'L' : 'M'}${x(i, n).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+    const last = s.points[n - 1];
+    const dots = s.points.map((p, i) => `<circle cx="${x(i, n).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="2.5" fill="${s.color}">
+      <title>${esc(s.label)} — ${esc(p.label)}: ${esc(format(p.value))}</title></circle>`).join('');
+    return `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2"
+        stroke-linejoin="round" stroke-linecap="round"/>${dots}
+      <text class="axis" x="${(WIDTH - padRight + 4)}" y="${(y(last.value) + 3.5).toFixed(1)}"
+        fill="${s.color}" style="font-weight:700">${esc(format(last.value))}</text>`;
+  }).join('');
+
+  const firstSeries = drawable[0].points;
+  const ends = [0, firstSeries.length - 1].map((i) => `
+    <text class="axis" x="${x(i, firstSeries.length).toFixed(1)}" y="${height - 4}"
+      text-anchor="${i === 0 ? 'start' : 'end'}">${esc(firstSeries[i].label)}</text>`).join('');
+
+  const legend = `<div class="legend">${drawable.map((s) => `
+    <span class="legend-item"><span class="legend-swatch" style="background:${s.color}"></span>${esc(s.label)}</span>`).join('')}</div>`;
+
+  return `${legend}<svg class="chart" viewBox="0 0 ${WIDTH} ${height}" role="img"
+    aria-label="${esc(drawable.map((s) => s.label).join(' and '))} over ${count} readings">
+    ${grid}${lines}${ends}</svg>`;
+}

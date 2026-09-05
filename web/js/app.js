@@ -127,8 +127,14 @@ async function boot() {
   if (!window.location.hash) window.location.replace('#/today');
   render();
 
-  if ('serviceWorker' in navigator) {
-    // Registered after first paint so it never delays the app appearing.
+  // Registered after first paint so it never delays the app appearing.
+  //
+  // Skipped on localhost: the worker serves cache-first, which means an edit to
+  // a source file keeps showing the previous version until the cache version is
+  // bumped. That is the right behaviour in production and pure friction while
+  // developing, where the dev server already sends no-store.
+  const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+  if ('serviceWorker' in navigator && !isLocal) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 }

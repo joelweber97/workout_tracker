@@ -44,7 +44,7 @@ support to work — GitHub Pages is HTTPS by default.
 | **Active workout** | Weight, reps and RPE per set, warm-up ramps, plate maths, last session's numbers inline, a suggested working weight, personal-record alerts, supersets, automatic rest timer |
 | **History** | Every finished session by month, down to individual sets |
 | **Exercises** | The library grouped by muscle, with per-exercise records and an estimated-1RM trend |
-| **Stats** | Weekly volume, split by body region, most-trained movements over 8 / 12 / 26 weeks, and body weight over time |
+| **Stats** | Weekly volume, split by body region, most-trained movements over 8 / 12 / 26 weeks, and body composition over time |
 | **Coach** | Weekly hard sets per muscle against the 10–20 range, progression suggestions, programme-level observations, and a briefing to paste into Claude |
 
 ## How the coaching works

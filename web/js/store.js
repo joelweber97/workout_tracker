@@ -253,14 +253,24 @@ export async function deleteRoutine(id) {
 // --- Body weight -------------------------------------------------------------
 
 /**
- * One reading per day: logging again on the same day replaces that day's entry
- * rather than stacking two points on the chart.
+ * One record per day holding weight and body fat together — you normally read
+ * both off the same scale at the same moment. Logging again on the same day
+ * merges into that day's entry rather than stacking two points on the chart,
+ * and fields you leave blank keep whatever was already recorded.
  */
-export async function logBodyWeight(weightKg, when = Date.now()) {
+export async function logBodyMetrics({ weightKg, bodyFatPct } = {}, when = Date.now()) {
   const day = new Date(when);
+  // Noon, so a reading can't drift into the neighbouring day across time zones.
   day.setHours(12, 0, 0, 0);
   const id = `bw-${day.toISOString().slice(0, 10)}`;
-  const record = { id, recordedAt: day.getTime(), weightKg };
+
+  const existing = state.metrics.find((m) => m.id === id);
+  const record = {
+    id,
+    recordedAt: day.getTime(),
+    weightKg: weightKg ?? existing?.weightKg ?? null,
+    bodyFatPct: bodyFatPct ?? existing?.bodyFatPct ?? null,
+  };
 
   await db.put('metrics', record);
   const index = state.metrics.findIndex((m) => m.id === id);
@@ -277,7 +287,10 @@ export async function deleteBodyWeight(id) {
   notify();
 }
 
-export const latestBodyWeight = () => state.metrics[0] ?? null;
+export const latestBodyMetrics = () => state.metrics[0] ?? null;
+
+/** The most recent day that actually recorded the given field. */
+export const latestWith = (field) => state.metrics.find((m) => m[field] != null) ?? null;
 
 // --- Repeating a session -----------------------------------------------------
 
