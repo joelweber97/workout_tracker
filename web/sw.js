@@ -10,7 +10,7 @@
  * near the network.
  */
 
-const CACHE_VERSION = 'overload-v3';
+const CACHE_VERSION = 'overload-v4';
 
 const SHELL = [
   './',
@@ -48,7 +48,13 @@ const SHELL = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION)
-      .then((cache) => cache.addAll(SHELL))
+      // `cache: 'reload'` is load-bearing. A plain addAll() fetches through the
+      // browser's HTTP cache, so a new cache version can be populated with the
+      // very files it was bumped to replace — the app then serves a stale build
+      // from a fresh-looking cache, indefinitely.
+      .then((cache) => cache.addAll(
+        SHELL.map((url) => new Request(url, { cache: 'reload' })),
+      ))
       .then(() => self.skipWaiting()),
   );
 });
@@ -96,5 +102,9 @@ function store(request, response) {
 }
 
 function refresh(request) {
-  return fetch(request).then((response) => store(request, response)).catch(() => {});
+  // Revalidate against the server rather than accepting whatever the HTTP cache
+  // holds, for the same reason install bypasses it.
+  return fetch(new Request(request, { cache: 'no-cache' }))
+    .then((response) => store(request, response))
+    .catch(() => {});
 }
