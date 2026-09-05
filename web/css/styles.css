@@ -756,3 +756,12 @@ textarea { resize: vertical; min-height: 72px; }
   font-weight: 650;
   color: var(--ink-3);
 }
+
+.hint {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}

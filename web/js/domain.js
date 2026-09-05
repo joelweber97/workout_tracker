@@ -97,7 +97,13 @@ export function newExercise({
 export function newSet({ reps = 0, weightKg = 0, warmup = false } = {}) {
   // `rpe` stays null unless logged — the progression engine treats absent and
   // "felt easy" very differently.
-  return { id: uid(), reps, weightKg, done: false, warmup, rpe: null, completedAt: null };
+  //
+  // `touched` records that someone typed into this set, which is what separates
+  // a set you performed but forgot to tick from one a routine merely planned.
+  return {
+    id: uid(), reps, weightKg, done: false, warmup, rpe: null,
+    touched: false, completedAt: null,
+  };
 }
 
 export function newEntry(exerciseId, sets = [newSet()]) {
@@ -307,6 +313,17 @@ export function lastPerformance(exerciseId, workouts, excludeWorkoutId) {
     }
   }
   return null;
+}
+
+/**
+ * Sets that carry real numbers but were never ticked. Someone typed a weight
+ * and reps and moved on to the next exercise, which is a log in every sense
+ * except the one the app was counting.
+ */
+export function pendingSets(workout) {
+  return workout.entries.flatMap((entry) => entry.sets.filter(
+    (set) => !set.done && !set.warmup && set.touched && set.reps > 0,
+  ));
 }
 
 /**

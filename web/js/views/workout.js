@@ -16,7 +16,7 @@ import {
 import { esc, volume, duration, weightValue, toKg } from '../format.js';
 import {
   newSet, newEntry, uid, workoutVolume, workoutSetCount, workoutDuration,
-  lastPerformance, beatsRecord,
+  lastPerformance, beatsRecord, pendingSets,
 } from '../domain.js';
 import { suggest } from '../coach.js';
 import { platesPerSide, describePlates, warmupRamp, DEFAULT_BAR } from '../gym.js';
@@ -86,6 +86,8 @@ export default function renderWorkout(root, workoutId) {
       if (!set) return;
       if (kind === 'reps') set.reps = Math.round(value);
       else set.weightKg = toKg(value, unit);
+      // Distinguishes a set you filled in from one a routine planned for you.
+      set.touched = true;
     });
     refreshTotals(root, workoutId, unit);
     refreshPlates(root, workoutId, entryId, unit);
@@ -116,6 +118,7 @@ export default function renderWorkout(root, workoutId) {
     refreshTotals(root, workoutId, unit);
 
     if (done) {
+      root.querySelector('#tick-hint')?.remove();
       haptic(store.state.settings.haptics);
       if (record) {
         const name = store.exerciseById(entry.exerciseId)?.name ?? 'that lift';
@@ -323,6 +326,9 @@ function groupLabels(workout) {
 }
 
 function entryHtml(entry, index, workout, unit) {
+  // Shown on the first exercise until something has been ticked. The circle is
+  // the least discoverable control on the screen and the most consequential.
+  const showHint = index === 0 && workoutSetCount(workout) === 0;
   const exercise = store.exerciseById(entry.exerciseId);
   const name = exercise?.name ?? 'Deleted exercise';
   const previous = exercise ? lastPerformance(exercise.id, store.state.workouts, workout.id) : null;
@@ -354,6 +360,10 @@ function entryHtml(entry, index, workout, unit) {
       </div>
 
       ${entry.sets.map((set, i) => setRowHtml(set, i, entry, unit, previousLabel)).join('')}
+
+      ${showHint ? `<div class="hint" id="tick-hint">
+        Tap the circle when you finish a set — that logs it and starts your rest timer.
+      </div>` : ''}
 
       <div data-plates-for="${entry.id}">${platesHtml(entry, exercise, unit)}</div>
 
@@ -457,13 +467,69 @@ function refreshPlates(root, workoutId, entryId, unit) {
   if (entry) host.innerHTML = platesHtml(entry, store.exerciseById(entry.exerciseId), unit);
 }
 
+/**
+ * Finishing has to account for sets that were filled in but never ticked.
+ * Typing a weight and reps is a log in every sense except the tick, and
+ * silently discarding it — which is what this used to do — is the worst
+ * possible outcome for someone who has just trained.
+ */
 async function finish(workout) {
-  const logged = workoutSetCount(workout);
-  const message = logged === 0
-    ? 'Nothing was logged. Discard this session?'
-    : `Finish with ${logged} set${logged === 1 ? '' : 's'}? Sets you haven’t ticked off won’t be saved.`;
-  if (!window.confirm(message)) return;
+  const ticked = workoutSetCount(workout);
+  const pending = pendingSets(workout);
 
+  if (ticked === 0 && pending.length === 0) {
+    if (!window.confirm('Nothing was logged. Discard this session?')) return;
+    await close(workout);
+    return;
+  }
+
+  const plural = (n) => (n === 1 ? '' : 's');
+  const options = [];
+
+  if (pending.length) {
+    options.push({
+      key: 'all',
+      label: `Log ${ticked + pending.length} set${plural(ticked + pending.length)} and finish`,
+      detail: `includes ${pending.length} unticked`,
+    });
+  }
+  if (ticked) {
+    options.push({
+      key: 'ticked',
+      label: `Finish with ${ticked} ticked set${plural(ticked)}`,
+      detail: pending.length ? `discards ${pending.length}` : undefined,
+    });
+  }
+  options.push({ key: 'discard', label: 'Discard session', destructive: true });
+
+  const choice = await actionSheet('Finish workout', options);
+  if (!choice) return;
+
+  if (choice === 'discard') {
+    if (!window.confirm('Discard this session? It cannot be recovered.')) return;
+    restTimer.stop();
+    await store.deleteWorkout(workout.id);
+    navigate('#/today');
+    return;
+  }
+
+  if (choice === 'all') {
+    await store.mutateWorkout(workout.id, (w) => {
+      for (const entry of w.entries) {
+        for (const set of entry.sets) {
+          if (!set.done && !set.warmup && set.touched && set.reps > 0) {
+            set.done = true;
+            set.completedAt = Date.now();
+          }
+        }
+      }
+    });
+  }
+
+  await close(store.workoutById(workout.id) ?? workout);
+}
+
+async function close(workout) {
   restTimer.stop();
   await store.flushWorkout(workout.id);
   await store.finishActiveWorkout(workout.id);
