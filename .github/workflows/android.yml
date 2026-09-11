@@ -27,10 +27,19 @@ jobs:
       - name: Build
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug bundleRelease
+      # Surfaces the real output paths as annotations, which are readable from
+      # the public API even when the full log isn't.
+      - name: List outputs
+        run: |
+          find android/app/build/outputs -type f \( -name '*.apk' -o -name '*.aab' \) \
+            | while read -r f; do echo "::notice title=Build output::$f"; done
       - uses: actions/upload-artifact@v7
         with:
-          name: overload-android
-          path: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            android/app/build/outputs/bundle/release/app-release.aab
+          name: overload-android-debug-apk
+          path: android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: overload-android-release-aab
+          path: android/app/build/outputs/bundle/**/*.aab
+          if-no-files-found: warn
