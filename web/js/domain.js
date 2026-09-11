@@ -81,11 +81,12 @@ export function uid() {
 // --- Constructors -----------------------------------------------------------
 
 export function newExercise({
-  name, muscleGroup, equipment, isCustom = false, notes = '',
+  id = uid(), name, muscleGroup, equipment, isCustom = false, notes = '',
   description = '', secondary = [],
 }) {
+  // Library exercises pass their permanent id; custom ones get a random one.
   return {
-    id: uid(), name, muscleGroup, equipment, isCustom, notes,
+    id, name, muscleGroup, equipment, isCustom, notes,
     description,
     // Muscles the movement also trains. Counted at half weight in the volume
     // balance, since a secondary muscle isn't getting the same stimulus.

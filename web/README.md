@@ -42,6 +42,13 @@ web/
   and write on a debounce. A re-render would blur the field mid-entry.
 - **A workout document carries its entries and sets inline.** IndexedDB isn't
   relational and the UI always wants the whole session at once.
+- **Library exercises have permanent ids** (`barbell-bench-press`), frozen in
+  `library.js`. Custom exercises get random ids. On launch `store.js` compares
+  `LIBRARY_VERSION` with the install's and, if they differ, maps old rows onto
+  the permanent ids by name, rewrites every reference, adds new rows and
+  refreshes library wording — never touching notes, archive flags or custom
+  exercises. Bump `LIBRARY_VERSION` whenever a library row changes; never reuse
+  an id for a different movement.
 - **The IndexedDB database is still called `ledger`**, as are the localStorage
   keys. They were named before the app was; renaming them would orphan every
   workout already logged on someone's device.

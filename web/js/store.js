@@ -2,7 +2,7 @@
 // Views read from `state` and call these mutators; nothing else touches `db`.
 
 import * as db from './db.js';
-import { EXERCISE_LIBRARY, STARTER_ROUTINES } from './library.js';
+import { EXERCISE_LIBRARY, STARTER_ROUTINES, LIBRARY_VERSION } from './library.js';
 import {
   newExercise, newRoutine, newSet, newEntry, newWorkout, uid, finishWorkout,
 } from './domain.js';
@@ -11,6 +11,8 @@ import {
 // are left alone so existing installs keep their settings.
 const SETTINGS_KEY = 'ledger.settings';
 const SEEDED_KEY = 'ledger.seeded';
+// Which library version this install's exercise rows reflect.
+const LIBRARY_KEY = 'ledger.libraryVersion';
 
 const DEFAULT_SETTINGS = {
   unit: 'lb',
@@ -82,6 +84,7 @@ export async function load() {
     if (state.exercises.length) localStorage.setItem(SEEDED_KEY, '1');
     else await seed();
   }
+  await migrateLibrary();
   sortAll();
   notify();
 }
@@ -94,8 +97,9 @@ export async function load() {
  */
 async function seed() {
   const byName = new Map();
-  const exercises = EXERCISE_LIBRARY.map(([name, muscleGroup, equipment, secondary, description]) => {
+  const exercises = EXERCISE_LIBRARY.map(([id, name, muscleGroup, equipment, secondary, description]) => {
     const exercise = newExercise({
+      id,
       name,
       muscleGroup,
       equipment,
@@ -119,6 +123,84 @@ async function seed() {
   state.exercises = exercises;
   state.routines = routines;
   localStorage.setItem(SEEDED_KEY, '1');
+}
+
+/**
+ * Brings an install's exercise rows up to the current library.
+ *
+ * Earlier builds gave every seeded exercise a random id, so two devices — or
+ * one device re-seeded — could never agree on what "Barbell Bench Press" was.
+ * This maps those rows onto the library's permanent ids by name, rewrites every
+ * reference in workouts and routines to match, collapses any duplicate copies
+ * left by the old seeding bug, adds rows the library has gained since, and
+ * refreshes library-owned wording. Custom exercises and anything the user
+ * wrote — notes, archived flags — are left exactly as they were.
+ *
+ * Runs once per LIBRARY_VERSION, and again after a backup import.
+ */
+async function migrateLibrary() {
+  const target = String(LIBRARY_VERSION);
+  if (localStorage.getItem(LIBRARY_KEY) === target) return;
+
+  const byId = new Map(EXERCISE_LIBRARY.map((row) => [row[0], row]));
+  const byName = new Map(EXERCISE_LIBRARY.map((row) => [row[1].toLowerCase(), row]));
+  const idMap = new Map();      // old id -> library id
+  const placed = new Set();     // library ids already represented
+  const kept = [];
+
+  for (const exercise of state.exercises) {
+    const row = exercise.isCustom
+      ? null
+      : (byId.get(exercise.id) ?? byName.get(exercise.name.toLowerCase()));
+
+    if (!row) { kept.push(exercise); continue; }   // custom, or seeded then dropped from the library
+
+    const [id, name, muscleGroup, equipment, secondary, description] = row;
+    if (exercise.id !== id) idMap.set(exercise.id, id);
+    if (placed.has(id)) continue;                  // a duplicate copy; its references fold into the first
+    placed.add(id);
+    kept.push({
+      ...exercise,
+      id, name, muscleGroup, equipment, description,
+      secondary: secondary ? secondary.split(',') : [],
+    });
+  }
+
+  for (const row of EXERCISE_LIBRARY) {
+    if (placed.has(row[0])) continue;
+    const [id, name, muscleGroup, equipment, secondary, description] = row;
+    kept.push(newExercise({
+      id, name, muscleGroup, equipment, description,
+      secondary: secondary ? secondary.split(',') : [],
+    }));
+  }
+
+  const changedWorkouts = [];
+  for (const workout of state.workouts) {
+    let touched = false;
+    for (const entry of workout.entries) {
+      if (idMap.has(entry.exerciseId)) { entry.exerciseId = idMap.get(entry.exerciseId); touched = true; }
+    }
+    if (touched) changedWorkouts.push(workout);
+  }
+  const changedRoutines = [];
+  for (const routine of state.routines) {
+    let touched = false;
+    for (const item of routine.items) {
+      if (idMap.has(item.exerciseId)) { item.exerciseId = idMap.get(item.exerciseId); touched = true; }
+    }
+    if (touched) changedRoutines.push(routine);
+  }
+
+  // Old random-id rows have to go, so the store is replaced rather than merged.
+  await db.clear('exercises');
+  await Promise.all([
+    db.putMany('exercises', kept),
+    changedWorkouts.length ? db.putMany('workouts', changedWorkouts) : null,
+    changedRoutines.length ? db.putMany('routines', changedRoutines) : null,
+  ]);
+  state.exercises = kept;
+  localStorage.setItem(LIBRARY_KEY, target);
 }
 
 function sortAll() {
@@ -386,6 +468,8 @@ export async function importData(json) {
   state.routines = parsed.routines ?? [];
   state.metrics = parsed.metrics ?? [];
   localStorage.setItem(SEEDED_KEY, '1');
+  localStorage.removeItem(LIBRARY_KEY);
+  await migrateLibrary();
   sortAll();
   notify();
 }

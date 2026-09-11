@@ -50,6 +50,11 @@ export const getAll = (store) => tx(store, 'readonly', (s) => s.getAll());
 export const put = (store, value) => tx(store, 'readwrite', (s) => s.put(value));
 export const remove = (store, id) => tx(store, 'readwrite', (s) => s.delete(id));
 
+/** Empties one store. The library migration rewrites exercises in full. */
+export function clear(store) {
+  return tx(store, 'readwrite', (s) => { s.clear(); return null; });
+}
+
 export function putMany(store, values) {
   return tx(store, 'readwrite', (s) => {
     for (const value of values) s.put(value);
