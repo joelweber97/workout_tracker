@@ -1,0 +1,36 @@
+# Builds the Android shell. Produces a debug APK you can sideload, and an
+# unsigned release bundle. Signing for Google Play is added once a keystore
+# exists; until then this is a compile check plus a testable artifact.
+name: Android
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', 'android/**', 'capacitor.config.json', 'package*.json', '.github/workflows/android.yml']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    # ubuntu-24.04 ships JDK 17 (the default) and the Android SDK; nothing to install.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Copies web/ into the shell. The copy is gitignored, so this must run in CI.
+      - run: npx cap sync android
+      - run: chmod +x android/gradlew
+      - name: Build
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug bundleRelease
+      - uses: actions/upload-artifact@v7
+        with:
+          name: overload-android
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error

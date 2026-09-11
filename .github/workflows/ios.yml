@@ -1,0 +1,36 @@
+# Builds the iOS shell for the simulator, unsigned. This proves the project
+# compiles against a current Xcode without needing an Apple Developer account.
+# Archiving and TestFlight upload are added once signing credentials exist.
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', 'ios/**', 'capacitor.config.json', 'package*.json', '.github/workflows/ios.yml']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    # macos-26 defaults to Xcode 26.6; Capacitor 8 needs 26.0 or later.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx cap sync ios
+      - name: Resolve Swift packages
+        working-directory: ios/App
+        run: xcodebuild -resolvePackageDependencies -project App.xcodeproj -scheme App
+      - name: Build for simulator
+        working-directory: ios/App
+        run: |
+          xcodebuild build \
+            -project App.xcodeproj \
+            -scheme App \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO

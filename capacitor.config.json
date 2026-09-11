@@ -1,0 +1,8 @@
+{
+  "appId": "com.joelweber.overload",
+  "appName": "Overload",
+  "webDir": "web",
+  "ios": {
+    "contentInset": "always"
+  }
+}

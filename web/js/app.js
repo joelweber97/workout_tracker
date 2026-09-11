@@ -134,7 +134,10 @@ async function boot() {
   // bumped. That is the right behaviour in production and pure friction while
   // developing, where the dev server already sends no-store.
   const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
-  if ('serviceWorker' in navigator && !isLocal) {
+  // Inside the Capacitor shell the files ship with the app, so there is nothing
+  // to cache — and WKWebView doesn't run workers on the capacitor:// scheme.
+  const isNative = Boolean(window.Capacitor?.isNativePlatform?.());
+  if ('serviceWorker' in navigator && !isLocal && !isNative) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 }

@@ -1,0 +1,23 @@
+{
+  "name": "overload",
+  "private": true,
+  "description": "Native shells for the Overload workout tracker. The web app in web/ has no build step and no dependencies; everything in here exists only to wrap it for the App Store and Google Play.",
+  "scripts": {
+    "serve": "node tools/serve.js",
+    "icons": "node tools/make-icons.js",
+    "sync": "cap sync",
+    "android": "cap open android",
+    "ios": "cap open ios"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.1"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
+    "@capacitor/ios": "^8.5.1"
+  }
+}

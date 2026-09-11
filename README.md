@@ -6,11 +6,25 @@ Two implementations live here. **The web app is the one that runs on your
 phone** — the iOS app can't be deployed from this machine (see below).
 
 ```
-web/     installable web app (PWA) — plain ES modules, no build step   ← use this
-tools/   dev server and icon generator (Node)
-WorkoutTracker/          native SwiftUI + SwiftData app — not currently buildable here
+web/       the app — plain ES modules, no build step, no dependencies
+android/   Capacitor shell for Google Play (wraps web/)
+ios/       Capacitor shell for the App Store (wraps web/)
+tools/     dev server and icon generator
+WorkoutTracker/          earlier native SwiftUI prototype — superseded by the shells above
 WorkoutTracker.xcodeproj
 ```
+
+## The native shells
+
+`android/` and `ios/` are [Capacitor](https://capacitorjs.com) projects that
+wrap `web/` unchanged. They exist for two reasons: a store listing, and
+access to HealthKit / Health Connect, which no web app can reach. The web app
+stays dependency-free; `package.json` at the root is only the shell tooling.
+
+Neither shell can be built on this Mac (no Xcode, no Android SDK), so both are
+built by GitHub Actions — `android.yml` on Ubuntu, `ios.yml` on macOS 26. After
+changing anything under `web/`, `npx cap sync` copies it into the shells; CI
+does that itself, and the copies are gitignored.
 
 ## The web app
 

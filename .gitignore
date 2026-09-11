@@ -20,3 +20,22 @@ Packages/
 
 # Secrets
 *.xcconfig.local
+
+# Native shells (Capacitor) — generated build output only; sources are committed.
+node_modules/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/app/*.iml
+ios/App/build/
+ios/App/DerivedData/
+ios/App/App.xcodeproj/xcuserdata/
+ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
+ios/App/App.xcworkspace/xcuserdata/
+*.xcuserstate
+# `cap sync` copies web/ into the shells; the copies are derived, not sources.
+android/app/src/main/assets/public/
+ios/App/App/public/
