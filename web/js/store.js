@@ -6,6 +6,7 @@ import { EXERCISE_LIBRARY, STARTER_ROUTINES, LIBRARY_VERSION } from './library.j
 import {
   newExercise, newRoutine, newSet, newEntry, newWorkout, uid, finishWorkout,
 } from './domain.js';
+import { generatePlan, planProgress, DELOAD_FACTOR } from './planner.js';
 
 // Same reasoning as DB_NAME in db.js: these keys predate the app's name and
 // are left alone so existing installs keep their settings.
@@ -27,6 +28,7 @@ export const state = {
   workouts: [],
   routines: [],
   metrics: [],
+  plans: [],
   settings: { ...DEFAULT_SETTINGS },
 };
 
@@ -69,13 +71,15 @@ export function updateSettings(patch) {
 
 export async function load() {
   state.settings = loadSettings();
-  const [exercises, workouts, routines, metrics] = await Promise.all([
+  const [exercises, workouts, routines, metrics, plans] = await Promise.all([
     db.getAll('exercises'), db.getAll('workouts'), db.getAll('routines'), db.getAll('metrics'),
+    db.getAll('plans'),
   ]);
   state.exercises = exercises;
   state.workouts = workouts;
   state.routines = routines;
   state.metrics = metrics;
+  state.plans = plans;
 
   // The flag lives in localStorage but the library lives in IndexedDB, and the
   // two can be cleared independently. Checking both stops a cleared flag from
@@ -208,6 +212,7 @@ function sortAll() {
   state.workouts.sort((a, b) => b.startedAt - a.startedAt);
   state.routines.sort((a, b) => a.name.localeCompare(b.name));
   state.metrics.sort((a, b) => b.recordedAt - a.recordedAt);
+  state.plans.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 // --- Lookups ----------------------------------------------------------------
@@ -218,6 +223,10 @@ export const workoutById = (id) => state.workouts.find((w) => w.id === id) ?? nu
 export const routineById = (id) => state.routines.find((r) => r.id === id) ?? null;
 export const activeWorkout = () => state.workouts.find((w) => !w.endedAt) ?? null;
 export const visibleExercises = () => state.exercises.filter((e) => !e.archived);
+/** One plan at a time; the newest is the live one. */
+export const activePlan = () => state.plans[0] ?? null;
+/** Routines a plan owns are shown under the plan, not in the general list. */
+export const freeRoutines = () => state.routines.filter((r) => !r.planId);
 
 // --- Workouts ---------------------------------------------------------------
 
@@ -437,6 +446,68 @@ export async function repeatWorkout(sourceId) {
   return saveWorkout(workout);
 }
 
+// --- Plans -------------------------------------------------------------------
+
+/**
+ * Generates and saves a plan, replacing any existing one. The plan's days are
+ * ordinary routines you can edit; they're just marked as belonging to it.
+ */
+export async function createPlan(inputs) {
+  const { plan, routines } = generatePlan(inputs, exercisesById());
+  const previous = activePlan();
+  if (previous) await deletePlan(previous.id);
+
+  for (const routine of routines) {
+    state.routines.push(routine);
+  }
+  state.plans.unshift(plan);
+  sortAll();
+  notify();
+
+  await Promise.all([db.putMany('routines', routines), db.put('plans', plan)]);
+  return plan;
+}
+
+/** Removes a plan and the routines it generated. Logged sessions are kept. */
+export async function deletePlan(id) {
+  const plan = state.plans.find((p) => p.id === id);
+  if (!plan) return;
+  const owned = new Set(plan.routineIds);
+  state.routines = state.routines.filter((r) => !owned.has(r.id));
+  state.plans = state.plans.filter((p) => p.id !== id);
+  notify();
+  await Promise.all([
+    db.remove('plans', id),
+    ...[...owned].map((rid) => db.remove('routines', rid)),
+  ]);
+}
+
+/**
+ * Starts the plan's next session. On a deload week the routine's sets are cut
+ * to DELOAD_FACTOR at this point, so the routine itself stays at full volume.
+ */
+export async function startFromPlan(plan) {
+  const existing = activeWorkout();
+  if (existing) return existing;
+
+  const progress = planProgress(plan, state.workouts);
+  const routine = routineById(plan.routineIds[progress.dayIndex]);
+  if (!routine) return null;
+
+  const workout = newWorkout(`${routine.name} · Week ${progress.week}${progress.isDeload ? ' (deload)' : ''}`);
+  workout.planId = plan.id;
+  workout.planWeek = progress.week;
+  workout.entries = routine.items.map((item) => {
+    const sets = progress.isDeload
+      ? Math.max(1, Math.round(item.targetSets * DELOAD_FACTOR))
+      : Math.max(1, item.targetSets);
+    return newEntry(item.exerciseId, Array.from({ length: sets }, () => newSet({ reps: item.targetReps })));
+  });
+  await saveWorkout(workout);
+  await saveRoutine({ ...routine, lastUsedAt: Date.now() });
+  return workout;
+}
+
 // --- Backup -----------------------------------------------------------------
 
 export function exportData() {
@@ -448,6 +519,7 @@ export function exportData() {
     workouts: state.workouts,
     routines: state.routines,
     metrics: state.metrics,
+    plans: state.plans,
   }, null, 2);
 }
 
@@ -462,11 +534,13 @@ export async function importData(json) {
     db.putMany('workouts', parsed.workouts),
     db.putMany('routines', parsed.routines ?? []),
     db.putMany('metrics', parsed.metrics ?? []),
+    db.putMany('plans', parsed.plans ?? []),
   ]);
   state.exercises = parsed.exercises;
   state.workouts = parsed.workouts;
   state.routines = parsed.routines ?? [];
   state.metrics = parsed.metrics ?? [];
+  state.plans = parsed.plans ?? [];
   localStorage.setItem(SEEDED_KEY, '1');
   localStorage.removeItem(LIBRARY_KEY);
   await migrateLibrary();
@@ -481,6 +555,7 @@ export async function resetEverything() {
   state.workouts = [];
   state.routines = [];
   state.metrics = [];
+  state.plans = [];
   await load();
 }
 

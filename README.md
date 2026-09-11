@@ -60,6 +60,7 @@ support to work — GitHub Pages is HTTPS by default.
 | **Exercises** | The library grouped by muscle, with per-exercise records and an estimated-1RM trend |
 | **Stats** | Weekly volume, split by body region, most-trained movements over 8 / 12 / 26 weeks, and body composition over time |
 | **Coach** | Weekly hard sets per muscle against the 10–20 range, progression suggestions, programme-level observations, and a briefing to paste into Claude |
+| **Plan** | Answer five questions — goal, experience, days, equipment, timeline — and get a full programme: a split, each day's exercises chosen from what you have, sets and reps for the goal, a deload every fourth week, and the reasoning behind every choice |
 
 ## How the coaching works
 
@@ -88,6 +89,16 @@ the number), a **warm-up ramp** at roughly 40/60/80% of your working weight,
 sets per muscle** against the 10–20 range — with an exercise's secondary
 muscles counted as half a set, since a row trains the biceps but not the way a
 curl does.
+
+**The plan generator (`web/js/planner.js`)** turns five answers into a
+programme. It's deterministic too: each training day is a template of movement
+patterns (a horizontal push, a hinge, a vertical pull…), each pattern has a
+fixed candidate list ordered by preference, and the first candidate you have
+the equipment for — and the plan hasn't already used — is chosen. Sets and reps
+follow from goal and role, volume scales with experience, first-year lifters
+are steered away from the hardest variants, and every fourth week is a deload
+at 60% of the sets. The plan explains itself, and each day is an ordinary
+routine you can edit.
 
 **The Claude layer (`web/js/ai.js`)** handles the qualitative half — programme
 critique, what to change and why. It builds a compact briefing of your last six

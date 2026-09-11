@@ -15,6 +15,7 @@ import renderStats from './views/stats.js';
 import renderCoach from './views/coach-view.js';
 import renderSettings from './views/settings.js';
 import renderRoutine from './views/routine.js';
+import renderPlan from './views/plan.js';
 
 const TABS = [
   { hash: '#/today', label: 'Today', iconName: 'today' },
@@ -35,6 +36,7 @@ const ROUTES = [
   [/^#\/coach$/, renderCoach],
   [/^#\/settings$/, renderSettings],
   [/^#\/routine\/([\w-]+)$/, renderRoutine],
+  [/^#\/plan$/, renderPlan],
 ];
 
 // Views attach delegated listeners to the container they're handed. That

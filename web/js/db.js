@@ -5,10 +5,10 @@
 // The app is called Overload; this key is not. It was named first, and renaming
 // it would orphan every workout already logged on the device.
 const DB_NAME = 'ledger';
-// v2 added the `metrics` store. `onupgradeneeded` only creates what's missing,
-// so an existing install keeps its workouts.
-const DB_VERSION = 2;
-const STORES = ['exercises', 'workouts', 'routines', 'metrics'];
+// v2 added `metrics`, v3 added `plans`. `onupgradeneeded` only creates what's
+// missing, so an existing install keeps its workouts.
+const DB_VERSION = 3;
+const STORES = ['exercises', 'workouts', 'routines', 'metrics', 'plans'];
 
 let dbPromise = null;
 
