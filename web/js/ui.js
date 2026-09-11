@@ -1,3 +1,5 @@
+import { haptics } from './native.js';
+
 // Small DOM helpers shared by the views. Not a framework — just the three or
 // four things that would otherwise be repeated in every screen.
 
@@ -45,8 +47,15 @@ export function toast(message) {
   toastTimer = setTimeout(() => el.remove(), 2200);
 }
 
-export function haptic(enabled, pattern = 12) {
-  if (enabled && navigator.vibrate) navigator.vibrate(pattern);
+/**
+ * Haptic feedback, if the user has it on. `strong` is for moments worth
+ * noticing — a record, rest over — and the default is a light tick.
+ * Native on the phone; `navigator.vibrate` only where a browser supports it.
+ */
+export function haptic(enabled, strong = false) {
+  if (!enabled) return;
+  if (strong) haptics.success();
+  else haptics.tap();
 }
 
 /** Delegated click handling: one listener per view instead of one per row. */

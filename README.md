@@ -14,6 +14,18 @@ WorkoutTracker/          earlier native SwiftUI prototype — superseded by the 
 WorkoutTracker.xcodeproj
 ```
 
+## Phone-first
+
+The product is the app on a phone, installed from a store. The browser build
+still exists — it's the same code — but only as a development preview: it's how
+the app is exercised and screenshotted during development, and it doesn't get
+haptics or notifications. Native capabilities are used unconditionally inside
+the shells and are no-ops outside them; the seam is `web/js/native.js`.
+
+Native plugins are vendored into `web/js/vendor/` by `tools/vendor.js` and
+resolved through an import map in `index.html`, so `web/` stays a plain
+static tree with no bundler.
+
 ## The native shells
 
 `android/` and `ios/` are [Capacitor](https://capacitorjs.com) projects that

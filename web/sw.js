@@ -10,7 +10,7 @@
  * near the network.
  */
 
-const CACHE_VERSION = 'overload-v12';
+const CACHE_VERSION = 'overload-v13';
 
 const SHELL = [
   './',
@@ -28,6 +28,15 @@ const SHELL = [
   './js/domain.js',
   './js/format.js',
   './js/library.js',
+  './js/native.js',
+  './js/planner.js',
+  './js/vendor/@capacitor/core/index.js',
+  './js/vendor/@capacitor/haptics/index.js',
+  './js/vendor/@capacitor/haptics/definitions.js',
+  './js/vendor/@capacitor/haptics/web.js',
+  './js/vendor/@capacitor/local-notifications/index.js',
+  './js/vendor/@capacitor/local-notifications/definitions.js',
+  './js/vendor/@capacitor/local-notifications/web.js',
   './js/picker.js',
   './js/gym.js',
   './js/rest.js',
@@ -37,6 +46,7 @@ const SHELL = [
   './js/views/exercise-detail.js',
   './js/views/exercises.js',
   './js/views/history.js',
+  './js/views/plan.js',
   './js/views/routine.js',
   './js/views/settings.js',
   './js/views/stats.js',

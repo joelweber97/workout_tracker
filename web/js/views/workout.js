@@ -20,6 +20,7 @@ import {
 } from '../domain.js';
 import { suggest } from '../coach.js';
 import { platesPerSide, describePlates, warmupRamp, DEFAULT_BAR } from '../gym.js';
+import { restNotification } from '../native.js';
 
 const RPE_VALUES = [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
 
@@ -123,7 +124,7 @@ export default function renderWorkout(root, workoutId) {
       if (record) {
         const name = store.exerciseById(entry.exerciseId)?.name ?? 'that lift';
         toast(`Personal record — ${name}`);
-        haptic(store.state.settings.haptics, [40, 60, 40, 60, 90]);
+        haptic(store.state.settings.haptics, true);
       }
       startRest(root);
     }
@@ -551,9 +552,11 @@ function startRest(root) {
   const seconds = store.state.settings.restSeconds;
   if (seconds <= 0) return;
   restTimer.start(seconds, () => {
-    haptic(store.state.settings.haptics, [90, 60, 90]);
+    haptic(store.state.settings.haptics, true);
     toast('Rest over');
   });
+  // The countdown dies with the screen; the notification doesn't.
+  restNotification.schedule(seconds);
   paintRest(root);
 }
 
@@ -581,6 +584,12 @@ function paintRest(root) {
       <button class="btn btn-sm btn-quiet" data-rest-skip aria-label="Skip rest">${icon('close', 16)}</button>
     </div>`;
 
-  host.querySelector('[data-rest-add]').onclick = () => restTimer.add(30);
-  host.querySelector('[data-rest-skip]').onclick = () => restTimer.stop();
+  host.querySelector('[data-rest-add]').onclick = () => {
+    restTimer.add(30);
+    restNotification.schedule(Math.round(restTimer.remaining));
+  };
+  host.querySelector('[data-rest-skip]').onclick = () => {
+    restTimer.stop();
+    restNotification.cancel();
+  };
 }
