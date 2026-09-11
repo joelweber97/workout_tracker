@@ -20,6 +20,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # The Capacitor 8 template compiles for Java 21; the image defaults to 17.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
       - run: npm ci
       # Copies web/ into the shell. The copy is gitignored, so this must run in CI.
       - run: npx cap sync android
