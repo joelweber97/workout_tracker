@@ -24,11 +24,18 @@ jobs:
       # Copies web/ into the shell. The copy is gitignored, so this must run in CI.
       - run: npx cap sync android
       - run: chmod +x android/gradlew
+      # On failure, the relevant part of Gradle's output is re-emitted as
+      # annotations so it's readable from the public API without the job log.
       - name: Build
         working-directory: android
-        run: ./gradlew --no-daemon assembleDebug bundleRelease
-      # Surfaces the real output paths as annotations, which are readable from
-      # the public API even when the full log isn't.
+        run: |
+          set -o pipefail
+          if ! ./gradlew --no-daemon --console=plain assembleDebug bundleRelease 2>&1 | tee build.log; then
+            grep -nE 'FAILURE|What went wrong|error:|Exception|Could not|not found|Unsupported|requires' build.log \
+              | head -25 | while read -r l; do echo "::error title=Gradle::${l:0:900}"; done
+            exit 1
+          fi
+      # Surfaces the real output paths as annotations, for the same reason.
       - name: List outputs
         run: |
           find android/app/build/outputs -type f \( -name '*.apk' -o -name '*.aab' \) \
