@@ -10,7 +10,7 @@
  * near the network.
  */
 
-const CACHE_VERSION = 'overload-v10';
+const CACHE_VERSION = 'overload-v11';
 
 const SHELL = [
   './',

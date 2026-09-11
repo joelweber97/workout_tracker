@@ -165,3 +165,41 @@ export function promptNumbers(title, fields, { note = '' } = {}) {
     first.select();
   });
 }
+
+/**
+ * A body silhouette with the target muscle group filled in. The outline is
+ * drawn faint and the region in full colour, so the eye lands on the part that
+ * matters. Colour comes from `currentColor`, which callers set by region.
+ */
+const BODY_OUTLINE = [
+  'M12 5.4a2.1 2.1 0 1 0 0-4.2 2.1 2.1 0 0 0 0 4.2z',           // head
+  'M8.6 6.4h6.8l.6 8.2H8z',                                      // torso
+  'M8.6 6.6 6.4 13.6M15.4 6.6l2.2 7',                            // arms
+  'M9 14.6l-.6 8M15 14.6l.6 8M12 14.6v8',                        // legs
+];
+
+const MUSCLE_REGIONS = {
+  chest: 'M9 6.9h6v3.1H9z',
+  back: 'M9 6.9h6v5.8H9z',
+  shoulders: 'M8.6 8.4a1.7 1.7 0 1 0 0-3.4 1.7 1.7 0 0 0 0 3.4zM15.4 8.4a1.7 1.7 0 1 0 0-3.4 1.7 1.7 0 0 0 0 3.4z',
+  biceps: 'M6.9 7.2l1.7.5-1 3.3-1.7-.5zM17.1 7.2l-1.7.5 1 3.3 1.7-.5z',
+  triceps: 'M6.3 9.2l1.7.5-.9 3.1-1.7-.5zM17.7 9.2l-1.7.5.9 3.1 1.7-.5z',
+  quads: 'M8.9 14.8h2.3v4.4H8.9zM12.8 14.8h2.3v4.4h-2.3z',
+  hamstrings: 'M8.8 16.2h2.3v4.4H8.8zM12.9 16.2h2.3v4.4h-2.3z',
+  glutes: 'M8.4 13h7.2v2.6H8.4z',
+  calves: 'M8.6 19.4h2.2v3.3H8.6zM13.2 19.4h2.2v3.3h-2.2z',
+  core: 'M9.3 10.5h5.4v3.6H9.3z',
+  fullBody: BODY_OUTLINE.join(''),
+  cardio: 'M12 21s-7.2-4.5-7.2-9.7a3.9 3.9 0 0 1 7.2-2.1 3.9 3.9 0 0 1 7.2 2.1C19.2 16.5 12 21 12 21z',
+};
+
+export function muscleIcon(group, size = 32) {
+  const region = MUSCLE_REGIONS[group] ?? '';
+  // Cardio isn't a body part; the heart stands alone without the outline.
+  const outline = group === 'cardio' ? '' : BODY_OUTLINE.map((d) => `<path d="${d}"/>`).join('');
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true">
+    <g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"
+       stroke-linejoin="round" opacity="0.35">${outline}</g>
+    <path d="${region}" fill="currentColor"/>
+  </svg>`;
+}

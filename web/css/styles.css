@@ -765,3 +765,36 @@ textarea { resize: vertical; min-height: 72px; }
   color: var(--ink-2);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
+
+/* --- Muscle-group grid ---------------------------------------------------- */
+
+.group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.group-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: inherit;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.group-card:active { background: var(--surface-2); }
+.group-card svg { display: block; }
+.group-name { font-size: 14px; font-weight: 600; margin-top: 4px; }
+.group-count { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* Icon colour follows the body region, matching the stats charts. */
+.tint-upper svg { color: var(--upper); }
+.tint-lower svg { color: var(--lower); }
+.tint-other svg { color: var(--other); }

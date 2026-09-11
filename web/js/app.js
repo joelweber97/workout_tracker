@@ -29,6 +29,7 @@ const ROUTES = [
   [/^#\/history$/, renderHistory],
   [/^#\/session\/([\w-]+)$/, renderWorkoutDetail],
   [/^#\/exercises$/, renderExercises],
+  [/^#\/exercises\/([a-zA-Z]+)$/, renderExercises],
   [/^#\/exercise\/([\w-]+)$/, renderExerciseDetail],
   [/^#\/stats$/, renderStats],
   [/^#\/coach$/, renderCoach],
